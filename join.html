@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Тебя вызвали в суд — Вердикт</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f7f2e8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;800;900&family=Martian+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/site.css">
+<link rel="stylesheet" href="assets/css/app.css">
+<style>
+  body{background:var(--desk);display:grid;min-height:100vh;place-items:center;padding:24px}
+  .card{width:min(560px,100%);background:var(--paper);border:1.5px solid var(--ink);
+    box-shadow:10px 10px 0 var(--ink);padding:clamp(24px,5vw,44px)}
+</style>
+</head>
+<body>
+<main class="card">
+  <a class="logo" href="index.html">Вер<em>дикт</em></a>
+
+  <div id="loading" style="margin-top:28px">
+    <div class="skel"><i style="width:40%"></i><i style="width:85%"></i><i style="height:52px"></i></div>
+  </div>
+
+  <div id="body" style="display:none">
+    <span class="tag" id="caseNo" style="margin-top:24px"></span>
+    <h1 class="h2" id="topic" style="margin:12px 0 16px"></h1>
+    <p class="small" id="intro"></p>
+
+    <div class="notice" style="border-color:var(--rule);background:var(--paper-2)">
+      <strong>Как это работает</strong>
+      <p class="small">Ты записываешь свои 60 секунд, не слыша чужую запись. Потом дело уходит
+      случайным присяжным. Проценты увидите оба одновременно, когда соберётся жюри.</p>
+    </div>
+
+    <div id="recorderMount" style="margin-top:24px"></div>
+
+    <div id="needLogin" style="display:none;margin-top:24px">
+      <a class="btn btn-block" id="loginLink">Войти и ответить</a>
+      <p class="muted" style="margin-top:12px">Регистрация занимает полминуты: почта и пароль. Имя не нужно.</p>
+    </div>
+  </div>
+
+  <div id="dead" style="display:none;margin-top:28px">
+    <h1 class="h2" id="deadTitle">Ссылка не работает</h1>
+    <p class="small" id="deadText" style="margin-top:12px"></p>
+    <div style="margin-top:24px"><a class="btn btn-ghost" href="index.html">На главную</a></div>
+  </div>
+</main>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script src="assets/js/api.js"></script>
+<script src="assets/js/recorder-ui.js"></script>
+<script>
+(function(){
+  'use strict';
+  var $ = function(s){ return document.querySelector(s); };
+  var token = new URLSearchParams(location.search).get('t');
+
+  function toast(text, bad){
+    var t = $('#toast');
+    t.textContent = text;
+    t.className = 'toast on' + (bad ? ' bad' : '');
+    setTimeout(function(){ t.classList.remove('on'); }, 3200);
+  }
+
+  function dead(title, text){
+    $('#loading').style.display = 'none';
+    $('#body').style.display = 'none';
+    $('#dead').style.display = 'block';
+    $('#deadTitle').textContent = title;
+    $('#deadText').textContent = text;
+  }
+
+  (async function(){
+    if (!token) return dead('Ссылка неполная', 'В адресе нет кода дела. Попроси оппонента прислать ссылку заново.');
+
+    var info, me;
+    try {
+      info = (await window.VerdictAPI.peekInvite(token)).dispute;
+    } catch (err) {
+      return dead('Дело не найдено', err.message);
+    }
+
+    try { me = (await window.VerdictAPI.me()).user; } catch (_) { me = null; }
+
+    $('#loading').style.display = 'none';
+    $('#body').style.display = 'block';
+    $('#caseNo').textContent = 'Дело № ' + info.no;
+    $('#topic').textContent = info.topic;
+
+    if (info.status !== 'awaiting_opponent') {
+      return dead('Дело уже закрыто', 'Вторая сторона больше не нужна: дело либо ушло к присяжным, либо истекло.');
+    }
+
+    var hours = Math.max(0, Math.round((info.opponentDeadline - Date.now()) / 3600000));
+    $('#intro').textContent = 'Тебя назвали второй стороной этого спора. На ответ есть ' + hours +
+      ' ч. Без твоей записи дело не увидит ни один присяжный.';
+
+    if (!me) {
+      $('#needLogin').style.display = 'block';
+      $('#loginLink').href = 'login.html?mode=register&next=' +
+        encodeURIComponent('join.html?t=' + token);
+      return;
+    }
+
+    try {
+      await window.VerdictAPI.acceptInvite(token);
+    } catch (err) {
+      return dead('Не получилось присоединиться', err.message);
+    }
+
+    window.mountRecorder($('#recorderMount'), {
+      label: 'Записать свой ответ',
+      onDone: async function (blob, durationMs, ui) {
+        ui.busy(true);
+        try {
+          await window.VerdictAPI.uploadSide(info.id, blob, durationMs);
+          toast('Записано. Дело ушло к присяжным.');
+          setTimeout(function(){ location.href = 'app.html#d=' + info.id; }, 1200);
+        } catch (err) {
+          toast(err.message, true);
+          ui.busy(false);
+        }
+      },
+      onError: function (msg) { toast(msg, true); }
+    });
+  })();
+})();
+</script>
+</body>
+</html>
