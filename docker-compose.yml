@@ -1,0 +1,26 @@
+services:
+  verdict:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:3000}
+      JWT_SECRET: ${JWT_SECRET:?Задай JWT_SECRET в .env перед запуском}
+      DB_PATH: /app/data/verdict.sqlite
+      UPLOAD_DIR: /app/uploads
+      JURY_MIN_QUORUM: ${JURY_MIN_QUORUM:-30}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      MODERATION_STRICT: ${MODERATION_STRICT:-false}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+    volumes:
+      - verdict-data:/app/data
+      - verdict-uploads:/app/uploads
+    restart: unless-stopped
+
+volumes:
+  verdict-data:
+  verdict-uploads:
