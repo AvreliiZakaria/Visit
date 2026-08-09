@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Модерация — Вердикт</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;800;900&family=Martian+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/site.css">
+<link rel="stylesheet" href="assets/css/app.css">
+<style>
+  .queue{max-width:900px;margin-inline:auto;padding:32px clamp(20px,5vw,48px) 96px}
+  .group{margin-top:48px}
+  .item{border-top:1.5px solid var(--ink);padding:20px 0}
+  .item:last-child{border-bottom:1.5px solid var(--ink)}
+  .item-top{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:baseline}
+  .item h3{font-size:1.0625rem;font-weight:700;letter-spacing:-.02em}
+  .why{font-family:var(--mono);font-size:.625rem;letter-spacing:.08em;text-transform:uppercase;
+    background:var(--warn-soft);border:1px solid var(--warn);padding:3px 6px}
+  .transcript{margin-top:12px;padding:12px;background:var(--paper-2);border:1px solid var(--rule);
+    font-size:.9375rem;line-height:1.6;max-height:220px;overflow-y:auto}
+  .acts{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+  .acts button{min-height:42px;padding:0 16px;border:1.5px solid var(--ink);font-weight:600;font-size:.875rem;
+    transition:background .16s,color .16s}
+  .acts .ok:hover{background:var(--go);}
+  .acts .no{border-color:var(--a);color:var(--a)}
+  .acts .no:hover{background:var(--a);color:var(--paper)}
+  .none{color:var(--ink-3);font-size:.9375rem;padding:16px 0;border-top:1px solid var(--rule)}
+</style>
+</head>
+<body class="app">
+
+<header class="appbar">
+  <div class="wrap appbar-in">
+    <a class="logo" href="index.html">Вер<em>дикт</em></a>
+    <span class="mode" style="font-family:var(--mono);font-size:.5rem;letter-spacing:.11em;text-transform:uppercase;border:1px solid var(--ink);padding:3px 6px">модерация</span>
+    <div class="who"><a class="exit" href="app.html">В приложение</a></div>
+  </div>
+</header>
+
+<main class="queue">
+  <h1 class="h2">Очередь разбора</h1>
+  <p class="small" style="margin-top:12px;max-width:60ch">Автоматика ловит личные данные, угрозы и упоминание детей.
+  Контекст она не понимает, поэтому решение всегда за человеком. Пропущенное дело сразу уходит присяжным.</p>
+
+  <section class="group">
+    <span class="eyebrow">Записи на проверке</span>
+    <div id="sides"><p class="none">Загружаю…</p></div>
+  </section>
+
+  <section class="group">
+    <span class="eyebrow">Жалобы пользователей</span>
+    <div id="reports"><p class="none">Загружаю…</p></div>
+  </section>
+
+  <section class="group">
+    <span class="eyebrow">Задержанные и заблокированные дела</span>
+    <div id="held"><p class="none">Загружаю…</p></div>
+  </section>
+</main>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script src="assets/js/api.js"></script>
+<script>
+(function(){
+  'use strict';
+  var $ = function(s){ return document.querySelector(s); };
+  var REASONS = {
+    doxxing:'раскрытие личных данных', harassment:'травля', nsfw:'откровенный контент',
+    minor:'несовершеннолетний', thirdparty_data:'данные третьих лиц', spam:'спам',
+    other:'другое', automod:'автопроверка'
+  };
+
+  function toast(text, bad){
+    var t = $('#toast');
+    t.textContent = text;
+    t.className = 'toast on' + (bad ? ' bad' : '');
+    setTimeout(function(){ t.classList.remove('on'); }, 3000);
+  }
+  function esc(s){
+    return String(s == null ? '' : s).replace(/[&<>"]/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];
+    });
+  }
+
+  async function load(){
+    var data;
+    try {
+      data = await fetch('/api/moderation/queue', { credentials:'same-origin' }).then(function(r){
+        if (r.status === 401) throw new Error('Нужно войти.');
+        if (r.status === 403) throw new Error('Доступ только для модераторов. Задай свою почту в ADMIN_EMAIL и зарегистрируйся заново.');
+        return r.json();
+      });
+    } catch (err) {
+      document.querySelector('main').innerHTML =
+        '<h1 class="h2">Нет доступа</h1><p class="small" style="margin-top:12px;max-width:56ch">' +
+        esc(err.message) + '</p><div style="margin-top:24px"><a class="btn btn-ghost" href="login.html?next=admin.html">Войти</a></div>';
+      return;
+    }
+
+    /* ---- записи ---- */
+    $('#sides').innerHTML = data.flaggedSides.length
+      ? data.flaggedSides.map(function(s){
+          return '<div class="item"><div class="item-top">' +
+            '<h3>Сторона ' + (s.label === 'a' ? 'А' : 'Б') + ' · дело ' + esc(s.dispute_id.slice(0,8)) + '</h3>' +
+            '<span class="why">' + esc(s.moderation_note || s.moderation_state) + '</span></div>' +
+            '<div class="transcript">' + (s.transcript ? esc(s.transcript) : '<i>транскрипта нет: распознавание выключено</i>') + '</div>' +
+            '<div class="acts">' +
+            '<button class="ok" data-allow="' + s.id + '">Пропустить в жюри</button>' +
+            '<button class="no" data-block="' + s.id + '">Заблокировать дело</button>' +
+            '</div></div>';
+        }).join('')
+      : '<p class="none">Чисто, разбирать нечего.</p>';
+
+    /* ---- жалобы ---- */
+    $('#reports').innerHTML = data.reports.length
+      ? data.reports.map(function(r){
+          return '<div class="item"><div class="item-top">' +
+            '<h3>' + esc(r.target_type) + ' · ' + esc(r.target_id.slice(0,8)) + '</h3>' +
+            '<span class="why">' + esc(REASONS[r.reason] || r.reason) + '</span></div>' +
+            (r.detail ? '<div class="transcript">' + esc(r.detail) + '</div>' : '') +
+            '<div class="acts">' +
+            '<button class="no" data-uphold="' + r.id + '">Жалоба обоснована</button>' +
+            '<button class="ok" data-reject="' + r.id + '">Отклонить жалобу</button>' +
+            '</div></div>';
+        }).join('')
+      : '<p class="none">Жалоб нет.</p>';
+
+    /* ---- дела ---- */
+    $('#held').innerHTML = data.heldDisputes.length
+      ? data.heldDisputes.map(function(d){
+          return '<div class="item"><div class="item-top">' +
+            '<h3>' + esc(d.topic) + '</h3>' +
+            '<span class="why">' + esc(d.status === 'blocked' ? 'заблокировано' : 'задержано') + '</span>' +
+            '</div><p class="muted" style="margin-top:6px">Дело № ' + d.public_no + '</p></div>';
+        }).join('')
+      : '<p class="none">Задержанных дел нет.</p>';
+
+    wire();
+  }
+
+  function post(url, body){
+    return fetch(url, {
+      method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body || {})
+    }).then(function(r){ return r.json().then(function(d){ if(!r.ok) throw new Error(d.message||'Ошибка'); return d; }); });
+  }
+
+  function wire(){
+    document.querySelectorAll('[data-allow]').forEach(function(b){
+      b.addEventListener('click', function(){
+        post('/api/moderation/sides/' + b.dataset.allow + '/review', { allow:true })
+          .then(function(){ toast('Запись пропущена, дело ушло присяжным.'); load(); })
+          .catch(function(e){ toast(e.message, true); });
+      });
+    });
+    document.querySelectorAll('[data-block]').forEach(function(b){
+      b.addEventListener('click', function(){
+        var note = window.prompt('Причина блокировки (увидит только команда)', 'личные данные третьих лиц');
+        if (note === null) return;
+        post('/api/moderation/sides/' + b.dataset.block + '/review', { allow:false, note:note })
+          .then(function(){ toast('Дело заблокировано.'); load(); })
+          .catch(function(e){ toast(e.message, true); });
+      });
+    });
+    document.querySelectorAll('[data-uphold]').forEach(function(b){
+      b.addEventListener('click', function(){
+        post('/api/moderation/reports/' + b.dataset.uphold + '/resolve', { uphold:true })
+          .then(function(){ toast('Жалоба принята, объект скрыт.'); load(); })
+          .catch(function(e){ toast(e.message, true); });
+      });
+    });
+    document.querySelectorAll('[data-reject]').forEach(function(b){
+      b.addEventListener('click', function(){
+        post('/api/moderation/reports/' + b.dataset.reject + '/resolve', { uphold:false })
+          .then(function(){ toast('Жалоба отклонена.'); load(); })
+          .catch(function(e){ toast(e.message, true); });
+      });
+    });
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>
