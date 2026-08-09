@@ -1,16 +1,7 @@
 node_modules/
+server/node_modules/
+server/data/
 .env
+.env.local
 *.log
-npm-debug.log*
-
-# данные и загрузки в репозиторий не попадают никогда
-data/
-uploads/
-*.sqlite
-*.sqlite-journal
-*.sqlite-wal
-*.sqlite-shm
-
 .DS_Store
-.idea/
-.vscode/
