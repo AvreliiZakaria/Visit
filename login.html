@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Вход — Вердикт</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f7f2e8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;800;900&family=Martian+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/site.css">
+<style>
+  body{background:var(--desk);display:grid;min-height:100vh;place-items:center;padding:24px}
+  .card{width:min(460px,100%);background:var(--paper);border:1.5px solid var(--ink);box-shadow:10px 10px 0 var(--ink);padding:clamp(24px,5vw,40px)}
+  .tabs{display:flex;border:1.5px solid var(--ink);margin:24px 0 28px}
+  .tabs button{flex:1;min-height:46px;font-weight:700;transition:background .18s,color .18s}
+  .tabs button.on{background:var(--ink);color:var(--paper)}
+  .field{display:grid;gap:8px;margin-bottom:16px}
+  .field label{font-family:var(--mono);font-size:.5625rem;letter-spacing:.11em;text-transform:uppercase;color:var(--ink-3)}
+  .field input{min-height:52px;background:var(--paper);border:1.5px solid var(--ink);padding:0 12px;font-size:1rem;transition:box-shadow .18s var(--ease-out)}
+  .field input:focus{outline:none;box-shadow:3px 3px 0 var(--a)}
+  .check{display:flex;gap:12px;align-items:flex-start;font-size:.875rem;color:var(--ink-2);cursor:pointer;margin-bottom:20px}
+  .check input{appearance:none;width:22px;height:22px;flex:none;border:1.5px solid var(--ink);margin:1px 0 0;position:relative;background:var(--paper);cursor:pointer}
+  .check input:checked{background:var(--go)}
+  .check input:checked::after{content:"";position:absolute;inset:4px 5px;border:solid var(--ink);border-width:0 0 2.5px 2.5px;transform:rotate(-45deg) translateY(-2px)}
+  .msg{display:none;border:1.5px solid var(--a);background:var(--a-soft);color:var(--a-deep);padding:12px;font-size:.875rem;margin-bottom:16px}
+  .msg.on{display:block}
+  .foot{margin-top:20px;font-size:.75rem;color:var(--ink-3);line-height:1.5}
+</style>
+</head>
+<body>
+<main class="card">
+  <a class="logo" href="index.html">Вер<em>дикт</em></a>
+
+  <div class="tabs">
+    <button id="tabLogin" class="on">Вход</button>
+    <button id="tabReg">Регистрация</button>
+  </div>
+
+  <p class="msg" id="msg"></p>
+
+  <form id="form" novalidate>
+    <div class="field">
+      <label for="email">Почта</label>
+      <input type="email" id="email" autocomplete="email" placeholder="ты@почта.ру" required>
+    </div>
+    <div class="field">
+      <label for="password">Пароль</label>
+      <input type="password" id="password" autocomplete="current-password" placeholder="минимум 8 символов" required>
+    </div>
+
+    <label class="check" id="ageWrap" style="display:none">
+      <input type="checkbox" id="age">
+      <span>Мне 17 или больше. Здесь взрослые люди разбирают взрослые ссоры.</span>
+    </label>
+
+    <button class="btn btn-block" id="submit" type="submit">Войти</button>
+  </form>
+
+  <p class="foot">Имя и фото не нужны. Внутри ты анонимный зверь с номером: ни присяжные, ни вторая сторона не видят настоящих данных.</p>
+</main>
+
+<script src="assets/js/api.js"></script>
+<script>
+(function(){
+  'use strict';
+  var mode = 'login';
+  var $ = function(s){ return document.querySelector(s); };
+  var params = new URLSearchParams(location.search);
+
+  function setMode(next){
+    mode = next;
+    $('#tabLogin').classList.toggle('on', next === 'login');
+    $('#tabReg').classList.toggle('on', next === 'register');
+    $('#ageWrap').style.display = next === 'register' ? 'flex' : 'none';
+    $('#submit').textContent = next === 'register' ? 'Создать аккаунт' : 'Войти';
+    $('#password').setAttribute('autocomplete', next === 'register' ? 'new-password' : 'current-password');
+    $('#msg').classList.remove('on');
+  }
+  $('#tabLogin').addEventListener('click', function(){ setMode('login'); });
+  $('#tabReg').addEventListener('click', function(){ setMode('register'); });
+  if (params.get('mode') === 'register') setMode('register');
+
+  function fail(text){
+    var m = $('#msg');
+    m.textContent = text;
+    m.classList.add('on');
+  }
+
+  $('#form').addEventListener('submit', async function(e){
+    e.preventDefault();
+    var btn = $('#submit');
+    var label = btn.textContent;
+    var email = $('#email').value.trim();
+    var pass = $('#password').value;
+
+    if (mode === 'register' && !$('#age').checked) {
+      return fail('Без подтверждения возраста зарегистрировать не можем.');
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Секунду…';
+    try {
+      if (mode === 'register') {
+        await window.VerdictAPI.register(email, pass, true);
+      } else {
+        await window.VerdictAPI.login(email, pass);
+      }
+      location.href = params.get('next') || 'app.html';
+    } catch (err) {
+      fail(err.message);
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  });
+})();
+</script>
+</body>
+</html>
