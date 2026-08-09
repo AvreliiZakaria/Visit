@@ -1,49 +1,53 @@
-/* =========================================================
-   Клиент API «Вердикта».
-   Один слой над fetch: cookie-сессия, понятные ошибки,
-   запись аудио через MediaRecorder, живой поток кворума.
-   ========================================================= */
-(function (global) {
+/**
+ * Клиент API «Вердикта». Один слой, через который ходят все страницы.
+ * Токен анонимный, лежит в localStorage. Ни почты, ни пароля.
+ */
+window.VerdictAPI = (function () {
   'use strict';
 
   var BASE = '/api';
+  var TOKEN_KEY = 'verdict_token';
+  var DEVICE_KEY = 'verdict_device';
 
-  function ApiError(message, code, status) {
-    var e = new Error(message);
-    e.name = 'ApiError';
-    e.code = code;
-    e.status = status;
-    return e;
+  function deviceId() {
+    var d = localStorage.getItem(DEVICE_KEY);
+    if (!d) {
+      d = (crypto.randomUUID && crypto.randomUUID()) || String(Date.now()) + Math.random().toString(36).slice(2);
+      localStorage.setItem(DEVICE_KEY, d);
+    }
+    return d;
   }
 
-  async function request(method, path, body) {
-    var init = { method: method, credentials: 'same-origin', headers: {} };
+  function token() { return localStorage.getItem(TOKEN_KEY); }
+  function setToken(t) { localStorage.setItem(TOKEN_KEY, t); }
 
-    if (body instanceof FormData) {
-      init.body = body;
-    } else if (body !== undefined) {
-      init.headers['Content-Type'] = 'application/json';
-      init.body = JSON.stringify(body);
-    }
+  function ApiError(message, code, status) {
+    this.message = message;
+    this.code = code;
+    this.status = status;
+  }
+  ApiError.prototype = Object.create(Error.prototype);
 
-    var res;
-    try {
-      res = await fetch(BASE + path, init);
-    } catch (_) {
-      throw ApiError('Сервер не отвечает. Проверь, запущен ли бэкенд.', 'offline', 0);
-    }
+  async function call(method, url, body, isForm) {
+    var headers = {};
+    var t = token();
+    if (t) headers.Authorization = 'Bearer ' + t;
+    if (body && !isForm) headers['Content-Type'] = 'application/json';
+
+    var res = await fetch(BASE + url, {
+      method: method,
+      headers: headers,
+      body: !body ? undefined : (isForm ? body : JSON.stringify(body))
+    });
 
     if (res.status === 204) return null;
 
     var data = null;
-    var text = await res.text();
-    if (text) {
-      try { data = JSON.parse(text); } catch (_) { data = { raw: text }; }
-    }
+    try { data = await res.json(); } catch (e) { data = null; }
 
     if (!res.ok) {
-      throw ApiError(
-        (data && data.message) || 'Запрос не прошёл',
+      throw new ApiError(
+        (data && data.message) || 'Сервер ответил ошибкой.',
         (data && data.error) || 'http_' + res.status,
         res.status
       );
@@ -51,197 +55,66 @@
     return data;
   }
 
-  var api = {
-    health: function () { return request('GET', '/health'); },
+  return {
+    ApiError: ApiError,
+    token: token,
 
-    /* ---------- аккаунт ---------- */
-    register: function (email, password, ageConfirmed) {
-      return request('POST', '/auth/register', {
-        email: email, password: password, ageConfirmed: ageConfirmed
-      });
-    },
-    login: function (email, password) {
-      return request('POST', '/auth/login', { email: email, password: password });
-    },
-    logout: function () { return request('POST', '/auth/logout'); },
-    me: function () { return request('GET', '/auth/me'); },
-    deleteAccount: function () { return request('DELETE', '/auth/me'); },
-
-    /* ---------- споры ---------- */
-    createDispute: function (topic, consentContent) {
-      return request('POST', '/disputes', { topic: topic, consentContent: consentContent });
-    },
-    myDisputes: function () { return request('GET', '/disputes/mine'); },
-    getDispute: function (id) { return request('GET', '/disputes/' + id); },
-    remind: function (id) { return request('POST', '/disputes/' + id + '/remind'); },
-    publishOneSided: function (id) { return request('POST', '/disputes/' + id + '/publish-one-sided'); },
-
-    uploadSide: function (disputeId, blob, durationMs) {
-      var form = new FormData();
-      var ext = (blob.type.split('/')[1] || 'webm').split(';')[0];
-      form.append('audio', blob, 'side.' + ext);
-      form.append('durationMs', String(Math.round(durationMs)));
-      return request('POST', '/disputes/' + disputeId + '/sides', form);
+    /** Живой ли бэкенд. Возвращает объект или null. */
+    async health() {
+      try { return await call('GET', '/health'); } catch (e) { return null; }
     },
 
-    /* ---------- приглашение ---------- */
-    peekInvite: function (token) { return request('GET', '/disputes/invite/' + token); },
-    acceptInvite: function (token) { return request('POST', '/disputes/invite/' + token + '/accept'); },
-
-    /* ---------- жюри ---------- */
-    nextCase: function () { return request('GET', '/jury/next'); },
-    vote: function (disputeId, payload) { return request('POST', '/jury/' + disputeId + '/vote', payload); },
-    comment: function (disputeId, body) { return request('POST', '/jury/' + disputeId + '/comment', { body: body }); },
-    upvote: function (commentId) { return request('POST', '/jury/comments/' + commentId + '/upvote'); },
-    comments: function (disputeId) { return request('GET', '/jury/' + disputeId + '/comments'); },
-
-    /* ---------- деньги ---------- */
-    catalog: function () { return request('GET', '/payments/catalog'); },
-    checkout: function (product, disputeId) {
-      return request('POST', '/payments/checkout', { product: product, disputeId: disputeId });
-    },
-    myPayments: function () { return request('GET', '/payments/mine'); },
-
-    /* ---------- жалобы ---------- */
-    report: function (targetType, targetId, reason, detail) {
-      return request('POST', '/moderation/reports', {
-        targetType: targetType, targetId: targetId, reason: reason, detail: detail
-      });
+    /** Гарантирует анонимный аккаунт и возвращает пользователя. */
+    async ensureUser() {
+      if (token()) {
+        try { return (await call('GET', '/auth/me')).user; } catch (e) { /* токен умер, заводим новый */ }
+      }
+      var r = await call('POST', '/auth/anon', { deviceId: deviceId() });
+      setToken(r.token);
+      return r.user;
     },
 
-    /* ---------- живой кворум ---------- */
-    streamDispute: function (disputeId, handlers) {
-      var es = new EventSource(BASE + '/disputes/' + disputeId + '/stream');
-      Object.keys(handlers || {}).forEach(function (evt) {
-        es.addEventListener(evt, function (e) {
-          var payload = null;
-          try { payload = JSON.parse(e.data); } catch (_) {}
-          handlers[evt](payload);
-        });
-      });
-      return es;
+    me() { return call('GET', '/auth/me'); },
+    deleteMe() { return call('DELETE', '/me'); },
+
+    createDispute(topic, consent) { return call('POST', '/disputes', { topic: topic, consent: !!consent }); },
+    myDisputes() { return call('GET', '/disputes/mine'); },
+    dispute(id) { return call('GET', '/disputes/' + id); },
+    publishOneSided(id) { return call('POST', '/disputes/' + id + '/publish-one-sided', {}); },
+
+    /** blob с микрофона, длительность в мс, текстовая расшифровка если есть */
+    uploadSide(disputeId, label, blob, durationMs, transcript) {
+      var fd = new FormData();
+      var type = blob.type || '';
+      var ext = type.indexOf('mp4') > -1 ? 'm4a' : type.indexOf('ogg') > -1 ? 'ogg' : 'webm';
+      fd.append('audio', blob, 'side-' + label + '.' + ext);
+      fd.append('durationMs', String(Math.round(durationMs)));
+      if (transcript) fd.append('transcript', transcript);
+      return call('POST', '/disputes/' + disputeId + '/sides/' + label + '/audio', fd, true);
+    },
+
+    byCode(code) { return call('GET', '/disputes/by-code/' + encodeURIComponent(code)); },
+    claim(code) { return call('POST', '/disputes/by-code/' + encodeURIComponent(code) + '/claim', {}); },
+
+    nextCase() { return call('GET', '/jury/next'); },
+    vote(assignmentId, payload) { return call('POST', '/jury/' + assignmentId + '/vote', payload); },
+    skipCase(assignmentId) { return call('POST', '/jury/' + assignmentId + '/skip', {}); },
+
+    comments(disputeId) { return call('GET', '/comments/' + disputeId); },
+    upvote(commentId) { return call('POST', '/comments/' + commentId + '/upvote', {}); },
+    report(payload) { return call('POST', '/reports', payload); },
+
+    tiers() { return call('GET', '/billing/tiers'); },
+    checkout(tier, disputeId) { return call('POST', '/billing/checkout', { tier: tier, disputeId: disputeId }); },
+
+    stats() { return call('GET', '/stats'); },
+    funnel() { return call('GET', '/funnel'); },
+    waitlist(email, role) { return call('POST', '/waitlist', { email: email, role: role }); },
+
+    /** URL записи с токеном в query: заголовки в тег audio не поставить. */
+    audioUrl(path) {
+      var t = token();
+      return path + (t ? '?token=' + encodeURIComponent(t) : '');
     }
   };
-
-  /* =========================================================
-     Запись аудио: настоящий микрофон, настоящий MediaRecorder.
-     ========================================================= */
-  function Recorder() {
-    this.stream = null;
-    this.rec = null;
-    this.chunks = [];
-    this.startedAt = 0;
-    this.durationMs = 0;
-    this.blob = null;
-    this.analyser = null;
-    this.audioCtx = null;
-  }
-
-  Recorder.supported = function () {
-    return Boolean(
-      global.navigator && global.navigator.mediaDevices &&
-      global.navigator.mediaDevices.getUserMedia && global.MediaRecorder
-    );
-  };
-
-  Recorder.prototype.pickMime = function () {
-    var candidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'];
-    for (var i = 0; i < candidates.length; i++) {
-      if (global.MediaRecorder.isTypeSupported(candidates[i])) return candidates[i];
-    }
-    return '';
-  };
-
-  Recorder.prototype.start = async function (onLevel) {
-    if (!Recorder.supported()) {
-      throw ApiError('Браузер не умеет записывать звук. Открой в Chrome, Safari или Firefox.', 'no_recorder', 0);
-    }
-
-    try {
-      this.stream = await global.navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-      });
-    } catch (err) {
-      var msg = err && err.name === 'NotAllowedError'
-        ? 'Доступ к микрофону запрещён. Разреши его в настройках сайта.'
-        : 'Микрофон недоступен.';
-      throw ApiError(msg, 'mic_denied', 0);
-    }
-
-    var mime = this.pickMime();
-    this.rec = new global.MediaRecorder(this.stream, mime ? { mimeType: mime } : undefined);
-    this.chunks = [];
-    this.blob = null;
-
-    var self = this;
-    this.rec.ondataavailable = function (e) {
-      if (e.data && e.data.size) self.chunks.push(e.data);
-    };
-
-    /* Уровень сигнала для волны: рисуем то, что реально слышит микрофон. */
-    if (typeof onLevel === 'function' && global.AudioContext) {
-      this.audioCtx = new global.AudioContext();
-      var src = this.audioCtx.createMediaStreamSource(this.stream);
-      this.analyser = this.audioCtx.createAnalyser();
-      this.analyser.fftSize = 512;
-      src.connect(this.analyser);
-      var buf = new Uint8Array(this.analyser.frequencyBinCount);
-      var loop = function () {
-        if (!self.analyser) return;
-        self.analyser.getByteFrequencyData(buf);
-        var sum = 0;
-        for (var i = 0; i < buf.length; i++) sum += buf[i];
-        onLevel(sum / buf.length / 255);
-        global.requestAnimationFrame(loop);
-      };
-      loop();
-    }
-
-    this.rec.start(250);
-    this.startedAt = Date.now();
-  };
-
-  Recorder.prototype.stop = function () {
-    var self = this;
-    return new Promise(function (resolve) {
-      if (!self.rec || self.rec.state === 'inactive') return resolve(null);
-      self.rec.onstop = function () {
-        self.durationMs = Date.now() - self.startedAt;
-        self.blob = new Blob(self.chunks, { type: (self.rec.mimeType || 'audio/webm').split(';')[0] });
-        self.cleanup();
-        resolve({ blob: self.blob, durationMs: self.durationMs });
-      };
-      self.rec.stop();
-    });
-  };
-
-  Recorder.prototype.cleanup = function () {
-    if (this.stream) {
-      this.stream.getTracks().forEach(function (t) { t.stop(); });
-      this.stream = null;
-    }
-    if (this.audioCtx) {
-      this.audioCtx.close().catch(function () {});
-      this.audioCtx = null;
-    }
-    this.analyser = null;
-  };
-
-  /* Идентификатор устройства для антифрода. Не персональные данные, просто соль. */
-  function deviceId() {
-    var key = 'verdict_device';
-    var v = null;
-    try { v = global.localStorage.getItem(key); } catch (_) {}
-    if (!v) {
-      v = (global.crypto && global.crypto.randomUUID)
-        ? global.crypto.randomUUID()
-        : String(Date.now()) + Math.random().toString(36).slice(2);
-      try { global.localStorage.setItem(key, v); } catch (_) {}
-    }
-    return v;
-  }
-
-  global.VerdictAPI = api;
-  global.VerdictRecorder = Recorder;
-  global.verdictDeviceId = deviceId;
-})(window);
+})();
