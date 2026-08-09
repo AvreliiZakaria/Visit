@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang='ru'>
+<head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>Вердикт — суд</title>
+<meta name='description' content='Живое приложение «Вердикт»: создать спор, записать 60 секунд, судить чужие дела, получить вердикт от реального жюри.'>
+<meta name='theme-color' content='#f7f2e8'>
+<link rel='icon' href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23231b2e'/%3E%3Ctext x='16' y='23' font-family='Arial Black,Arial' font-size='20' font-weight='900' text-anchor='middle' fill='%23d94f36'%3E%D0%92%3C/text%3E%3C/svg%3E">
+<link rel='preconnect' href='https://fonts.googleapis.com'>
+<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>
+<link href='https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;800;900&family=Martian+Mono:wght@400;600&display=swap' rel='stylesheet'>
+<link rel='stylesheet' href='assets/css/site.css'>
+<link rel='stylesheet' href='assets/css/app.css'>
+</head>
+<body>
+
+<header class='appbar'>
+  <div class='wrap appbar-in'>
+    <a class='logo' href='index.html'>Вер<em>дикт</em></a>
+    <span class='tag' id='envTag'>подключаюсь…</span>
+    <div class='who'>
+      <span id='whoAmI'>—</span>
+      <a class='back' href='index.html'>На сайт</a>
+    </div>
+  </div>
+</header>
+
+<div class='offline' id='offlineBanner'>
+  <div class='wrap offline-in'>
+    <b>Бэкенд не отвечает</b>
+    Это статичная раздача (например GitHub Pages), а суду нужен сервер: база, аудио, жюри.
+    Поднимается одной командой: <code>cd server &amp;&amp; npm install &amp;&amp; npm run seed &amp;&amp; npm start</code>, затем открой <code>localhost:8080/court.html</code>.
+    Разбор интерфейса без сервера лежит в <a href='app.html' style='text-decoration:underline'>прототипе</a>.
+  </div>
+</div>
+
+<div class='shell'>
+
+  <nav class='rail' id='rail' aria-label='Разделы'>
+    <button data-go='create'><span class='n'>01</span><span class='t'>Создать спор<span class='s'>Тема, 60 секунд, согласие</span></span></button>
+    <button data-go='invite'><span class='n'>02</span><span class='t'>Вторая сторона<span class='s'>Ссылка оппоненту</span></span></button>
+    <button data-go='jury'><span class='n'>03</span><span class='t'>Зал жюри<span class='s'>Слушать и голосовать</span></span></button>
+    <button data-go='verdict'><span class='n'>04</span><span class='t'>Мои дела<span class='s'>Кворум и вердикты</span></span></button>
+    <button data-go='profile'><span class='n'>05</span><span class='t'>Профиль<span class='s'>Счёт и бейджи</span></span></button>
+    <p class='rail-note'>Всё настоящее: запись идёт с микрофона, файлы лежат на сервере, голоса пишутся в базу. Кнопка голоса открывается, только когда сервер видит, что ты прослушал обе стороны на 80%.</p>
+  </nav>
+
+  <main>
+
+    <!-- 01 создать спор -->
+    <section class='pane on' id='p-create'>
+      <div class='pane-head'>
+        <span class='eyebrow'>Новое дело</span>
+        <span class='tag tag-a'>сторона А · ты</span>
+      </div>
+      <h2>В чём спор?</h2>
+      <p class='small' style='margin-top:12px;max-width:52ch'>Одно предложение по существу. Жюри должно понять суть, не зная вас.</p>
+
+      <div style='margin-top:28px'>
+        <textarea class='topic' id='topic' maxlength='90' rows='2' placeholder='Например: поехал на рыбалку в годовщину'></textarea>
+        <div class='topic-meta'>
+          <span class='eyebrow'>Формулируй нейтрально</span>
+          <span class='eyebrow mono' id='topicCount'>0/90</span>
+        </div>
+        <p class='inline-err' id='topicErr'></p>
+      </div>
+
+      <div class='recorder'>
+        <div class='rec-top'>
+          <span class='eyebrow' id='recState'>Готов к записи</span>
+          <span class='rec-timer mono' id='recTimer'>0:60</span>
+        </div>
+        <div class='wave' id='wave' aria-hidden='true'></div>
+        <button class='btn btn-block' id='recBtn'>
+          <svg width='16' height='16' viewBox='0 0 16 16' fill='none' aria-hidden='true'><rect x='5.5' y='1.5' width='5' height='8' rx='2.5' stroke='currentColor' stroke-width='1.5'/><path d='M3 8a5 5 0 0 0 10 0M8 13v2' stroke='currentColor' stroke-width='1.5'/></svg>
+          <span id='recLabel'>Записать аргументы</span>
+        </button>
+        <div class='rec-actions' id='recActions' hidden>
+          <button class='btn btn-ghost btn-sm' id='rePlay'>Прослушать</button>
+          <button class='btn btn-ghost btn-sm' id='reRec'>Записать заново</button>
+        </div>
+        <p class='inline-err' id='recErr'></p>
+        <p class='hint-mic'>Браузер спросит доступ к микрофону. Запись обрывается на 60 секундах, меньше 10 секунд сервер не примет.</p>
+      </div>
+
+      <label class='check'>
+        <input type='checkbox' id='consent'>
+        <span>Разрешаю анонимно использовать этот спор в видео. Оригинальный голос не публикуется, история переозвучивается синтезом.</span>
+      </label>
+
+      <div style='margin-top:28px'>
+        <button class='btn btn-block' id='submitCase'>Создать дело и отправить оппоненту</button>
+      </div>
+      <p class='muted' style='margin-top:12px'>Телефоны, адреса и почты вырезаются автоматически, а дела с данными третьих лиц уходят на ручную проверку.</p>
+    </section>
+
+    <!-- 02 вторая сторона -->
+    <section class='pane' id='p-invite'>
+      <div class='pane-head'>
+        <span class='eyebrow' id='inviteStatus'>Дело ждёт вторую сторону</span>
+        <span class='eyebrow mono' id='inviteClock'>—</span>
+      </div>
+      <h2 id='inviteTopic'>—</h2>
+      <p class='small' style='margin-top:12px;max-width:52ch'>Пока оппонент не запишет свои 60 секунд, дело закрыто для жюри. Односторонние обвинения мы не судим.</p>
+
+      <div class='linkbox'>
+        <code id='inviteLink'>—</code>
+        <button class='btn btn-ghost btn-sm' id='copyLink'>Копировать</button>
+      </div>
+      <div class='chips'>
+        <a class='chip' id='shareTg' target='_blank' rel='noopener' style='display:grid;place-items:center'>Telegram</a>
+        <a class='chip' id='shareWa' target='_blank' rel='noopener' style='display:grid;place-items:center'>WhatsApp</a>
+        <button class='chip' id='shareNative'>Ещё</button>
+      </div>
+
+      <div id='parties' style='margin-top:32px'></div>
+
+      <div class='notice' id='ghostNotice' style='display:none'>
+        <strong>Оппонент молчит больше суток</strong>
+        <p class='small'>Можно опубликовать дело с честной пометкой «одна сторона». Присяжные её увидят, и вес вердикта будет ниже.</p>
+        <div class='chips'><button class='chip' id='publishOneSided'>Опубликовать так</button></div>
+      </div>
+
+      <div style='margin-top:28px'><button class='btn btn-ghost btn-block' id='toVerdictFromInvite'>Смотреть состояние дела</button></div>
+    </section>
+
+    <!-- 03 зал жюри -->
+    <section class='pane' id='p-jury'>
+      <div class='pane-head'>
+        <span class='eyebrow'>Зал жюри</span>
+        <span class='tag' id='juryTag'>загружаю</span>
+      </div>
+
+      <div class='skel state on' id='jurySkel'>
+        <i style='width:62%'></i><i style='width:88%'></i><i style='height:52px'></i><i style='height:52px'></i>
+      </div>
+
+      <div class='state' id='juryCase'>
+        <span class='tag' id='caseAge'>—</span>
+        <h2 class='case-topic' id='caseTopic'>—</h2>
+        <div id='caseSides'></div>
+
+        <div id='voteGate' style='border-top:1.5px solid var(--ink);padding-top:24px;margin-top:8px'>
+          <div class='vote-row'>
+            <button class='vote a' data-vote='a' disabled>Сторона А права<small>слушал 0%</small></button>
+            <button class='vote b' data-vote='b' disabled>Сторона Б права<small>слушал 0%</small></button>
+          </div>
+          <textarea class='comment' id='juryComment' rows='2' placeholder='Комментарий для сторон (необязательно)'></textarea>
+          <p class='gate-hint' id='gateHint'>Голос откроется, когда прослушаешь обе стороны на 80%</p>
+          <div class='chips'>
+            <button class='chip' id='skipCase'>Пропустить дело</button>
+            <button class='chip' id='reportCase'>Пожаловаться</button>
+          </div>
+        </div>
+
+        <div class='state' id='votedBox'>
+          <div class='notice' style='border-color:var(--go-deep);background:oklch(95% 0.06 124)'>
+            <strong>Голос учтён</strong>
+            <p class='small'>Счёт скрыт до вердикта: увидев проценты, люди начинают голосовать за большинство.</p>
+          </div>
+          <div style='margin-top:20px'><button class='btn' id='nextCase'>Следующее дело</button></div>
+        </div>
+      </div>
+
+      <div class='state' id='juryEmpty'>
+        <span class='eyebrow'>Дел для тебя нет</span>
+        <h2 style='margin-top:10px'>Очередь пуста</h2>
+        <p class='small' style='margin-top:12px;max-width:52ch'>Свои дела судить нельзя, а чужих сейчас не осталось. Так выглядит холодный старт: без людей суда нет. Мы не подставляем ботов, поэтому просто ждём.</p>
+        <div class='chips' style='margin-top:20px'>
+          <button class='chip' id='retryJury'>Проверить снова</button>
+          <button class='chip' data-go='create'>Создать свой спор</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 04 мои дела -->
+    <section class='pane' id='p-verdict'>
+      <div class='pane-head'>
+        <span class='eyebrow'>Мои дела</span>
+        <button class='tag' id='refreshCases'>обновить</button>
+      </div>
+      <div id='caseList'></div>
+      <div id='caseDetail' style='margin-top:32px'></div>
+    </section>
+
+    <!-- 05 профиль -->
+    <section class='pane' id='p-profile'>
+      <div class='pane-head'>
+        <span class='eyebrow'>Профиль · анонимный</span>
+        <span class='tag' id='levelTag'>—</span>
+      </div>
+      <h2 id='profileName'>—</h2>
+      <div class='record' id='profileRecord'></div>
+
+      <hr class='divider'>
+      <span class='eyebrow'>Бейджи</span>
+      <div class='badges' id='profileBadges'></div>
+
+      <hr class='divider'>
+      <span class='eyebrow'>История споров</span>
+      <div id='profileHistory'></div>
+
+      <hr class='divider'>
+      <div class='chips'>
+        <button class='chip' id='openSub'>Подписка 7 $/мес</button>
+        <button class='chip' id='wipeMe'>Удалить мои данные</button>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class='scrim' id='scrim'></div>
+<div class='sheet' id='sheet' role='dialog' aria-modal='true' aria-label='Тарифы'>
+  <div class='grab'></div>
+  <span class='eyebrow' id='sheetKicker'>Дело готово к суду</span>
+  <h3 class='h3' style='margin-top:8px'>Ждать сутки или узнать быстрее</h3>
+  <div id='tierList'></div>
+  <div style='margin-top:24px'><button class='btn btn-block' id='buy'>Оплатить</button></div>
+  <button class='btn btn-ghost btn-sm btn-block' style='margin-top:8px' id='skipPay'>Подожду бесплатно</button>
+  <p class='fine'>Провайдер платежей здесь заглушка: в мобильном приложении это покупки App Store и Google Play, в вебе Stripe. Оплата меняет скорость сбора жюри и его размер, но никогда не результат.</p>
+</div>
+
+<div class='toast' id='toast' role='status'></div>
+
+<nav class='tabbar' id='tabbar' aria-label='Навигация'>
+  <button data-go='create' class='on'>
+    <svg viewBox='0 0 20 20' fill='none' aria-hidden='true'><path d='M3 17h6M11.5 2.5l6 6-8 8-6-6z' stroke='currentColor' stroke-width='1.5'/></svg>Спор
+  </button>
+  <button data-go='jury'>
+    <svg viewBox='0 0 20 20' fill='none' aria-hidden='true'><path d='M10 2 2.5 6 10 10l7.5-4z M2.5 11 10 15l7.5-4' stroke='currentColor' stroke-width='1.5'/></svg>Жюри
+  </button>
+  <button data-go='profile'>
+    <svg viewBox='0 0 20 20' fill='none' aria-hidden='true'><circle cx='10' cy='7' r='3.2' stroke='currentColor' stroke-width='1.5'/><path d='M3.5 17c1.4-3.2 3.7-4.6 6.5-4.6s5.1 1.4 6.5 4.6' stroke='currentColor' stroke-width='1.5'/></svg>Профиль
+  </button>
+</nav>
+
+<script src='assets/js/api.js'></script>
+<script src='assets/js/app.js'></script>
+</body>
+</html>
