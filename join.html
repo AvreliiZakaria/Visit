@@ -1,90 +1,21 @@
 <!DOCTYPE html>
-<html lang='ru'>
+<html lang="ru">
 <head>
-<meta charset='utf-8'>
-<meta name='viewport' content='width=device-width, initial-scale=1'>
-<title>Вердикт — тебя вызвали в суд</title>
-<meta name='description' content='Тебя позвали второй стороной в спор. Запиши 60 секунд аргументов, и дело уйдёт жюри.'>
-<meta name='theme-color' content='#f7f2e8'>
-<link rel='preconnect' href='https://fonts.googleapis.com'>
-<link rel='preconnect' href='https://fonts.gstatic.com' crossorigin>
-<link href='https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;800;900&family=Martian+Mono:wght@400;600&display=swap' rel='stylesheet'>
-<link rel='stylesheet' href='assets/css/site.css'>
-<link rel='stylesheet' href='assets/css/app.css'>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Вердикт, тебя вызвали в суд</title>
+<link rel="stylesheet" href="assets/css/site.css">
+<link rel="stylesheet" href="assets/css/app.css">
 </head>
 <body>
-
-<header class='appbar'>
-  <div class='wrap appbar-in'>
-    <a class='logo' href='index.html'>Вер<em>дикт</em></a>
-    <div class='who'><a class='back' href='index.html'>Что это вообще</a></div>
-  </div>
-</header>
-
-<div class='offline' id='offlineBanner'>
-  <div class='wrap offline-in'>
-    <b>Бэкенд не отвечает</b>
-    Ссылка работает только когда поднят сервер: <code>cd server &amp;&amp; npm install &amp;&amp; npm start</code>.
-  </div>
-</div>
-
-<main class='join'>
-  <div class='card'>
-
-    <div class='state on' id='loading'>
-      <div class='skel'><i style='width:50%'></i><i style='width:86%'></i><i style='height:48px'></i></div>
-    </div>
-
-    <div class='state' id='missing'>
-      <span class='eyebrow'>Дело не найдено</span>
-      <h2 style='margin-top:10px;font-size:1.75rem;font-weight:900;letter-spacing:-.03em'>Ссылка битая или дело уже закрыто</h2>
-      <p class='small' style='margin-top:12px'>Попроси оппонента прислать ссылку заново.</p>
-      <div style='margin-top:24px'><a class='btn' href='court.html'>Начать свой спор</a></div>
-    </div>
-
-    <div class='state' id='taken'>
-      <span class='eyebrow'>Место занято</span>
-      <h2 style='margin-top:10px;font-size:1.75rem;font-weight:900;letter-spacing:-.03em'>Вторая сторона уже записалась</h2>
-      <p class='small' style='margin-top:12px'>Дело ушло жюри. Результат появится, когда соберётся кворум.</p>
-      <div style='margin-top:24px'><a class='btn' href='court.html'>В зал жюри</a></div>
-    </div>
-
-    <div class='state' id='form'>
-      <span class='tag tag-b'>сторона Б · ты</span>
-      <h2 style='margin-top:14px;font-size:clamp(1.5rem,4vw,2rem);font-weight:900;letter-spacing:-.035em;line-height:1.1' id='joinTopic'>—</h2>
-      <p class='small' style='margin-top:14px;max-width:52ch'>Тебя позвали второй стороной. У тебя 60 секунд, чтобы объяснить свою правду. Твой голос услышат только анонимные присяжные, имя и лицо нигде не появятся.</p>
-
-      <div class='recorder'>
-        <div class='rec-top'>
-          <span class='eyebrow' id='recState'>Готов к записи</span>
-          <span class='rec-timer mono' id='recTimer'>0:60</span>
-        </div>
-        <div class='wave' id='wave' aria-hidden='true'></div>
-        <button class='btn btn-block' id='recBtn'><span id='recLabel'>Записать ответ</span></button>
-        <div class='rec-actions' id='recActions' hidden>
-          <button class='btn btn-ghost btn-sm' id='rePlay'>Прослушать</button>
-          <button class='btn btn-ghost btn-sm' id='reRec'>Записать заново</button>
-        </div>
-        <p class='inline-err' id='recErr'></p>
-      </div>
-
-      <div style='margin-top:28px'><button class='btn btn-block' id='send'>Отправить в суд</button></div>
-      <p class='muted' style='margin-top:12px'>После твоей записи дело уходит случайным присяжным. Изменить запись будет нельзя.</p>
-    </div>
-
-    <div class='state' id='done'>
-      <span class='eyebrow'>Готово</span>
-      <h2 style='margin-top:10px;font-size:1.75rem;font-weight:900;letter-spacing:-.03em'>Дело ушло жюри</h2>
-      <p class='small' style='margin-top:12px'>Вердикт придёт, когда соберётся кворум. Пока ждёшь, можешь посудить чужие споры: активные присяжные быстрее получают жюри на свои дела.</p>
-      <div style='margin-top:24px'><a class='btn' href='court.html'>В зал жюри</a></div>
-    </div>
-
-  </div>
-</main>
-
-<div class='toast' id='toast' role='status'></div>
-
-<script src='assets/js/api.js'></script>
-<script src='assets/js/join.js'></script>
-</body>
-</html>
+<header class="appbar"><div class="wrap appbar-in"><a class="logo" href="index.html">Вер<em>дикт</em></a><div class="who"><a class="back" href="index.html">Что это вообще</a></div></div></header>
+<main class="join"><div class="card">
+  <div class="state on" id="loading"><div class="skel"><i style="width:50%"></i><i style="width:86%"></i><i style="height:48px"></i></div></div>
+  <div class="state" id="missing"><span class="eyebrow">Дело не найдено</span><h2 style="margin-top:10px;font-size:1.75rem;font-weight:900">Ссылка битая или дело закрыто</h2><p class="small" style="margin-top:12px">Проверь, что ссылка начинается с <code>http://localhost:3000/join.html?t=</code>. Открывать её нужно при запущенном сервере.</p><div style="margin-top:24px"><a class="btn" href="index.html">На главную</a></div></div>
+  <div class="state" id="taken"><span class="eyebrow">Дело уже занято</span><h2 style="margin-top:10px;font-size:1.75rem;font-weight:900">Вторая сторона уже присоединилась</h2><p class="small" style="margin-top:12px">Для теста создай новый спор или используй другую ссылку.</p></div>
+  <div class="state" id="form"><span class="tag tag-b">сторона Б, ты</span><h2 style="margin-top:14px;font-size:clamp(1.5rem,4vw,2rem);font-weight:900;line-height:1.1" id="joinTopic">Загрузка дела...</h2><p class="small" style="margin-top:14px">Запиши до 60 секунд своей версии. Потом дело уйдёт случайным присяжным.</p><div id="joinRecorderMount" style="margin-top:24px"></div><p class="muted" style="margin-top:12px">Изменить запись после отправки нельзя.</p></div>
+  <div class="state" id="done"><span class="eyebrow">Готово</span><h2 style="margin-top:10px;font-size:1.75rem;font-weight:900">Ответ отправлен в суд</h2><p class="small" style="margin-top:12px">Когда соберётся кворум, обе стороны увидят вердикт.</p><div style="margin-top:24px"><a class="btn" href="app.html">Открыть приложение</a></div></div>
+</div></main>
+<div class="toast" id="toast" role="status"></div>
+<script src="assets/js/api.js"></script><script src="assets/js/recorder-ui.js"></script><script src="assets/js/join.js"></script>
+</body></html>
