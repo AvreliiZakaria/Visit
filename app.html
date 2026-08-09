@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Вердикт — прототип приложения</title>
+<meta name="description" content="Рабочий прототип «Вердикта»: создание спора, приглашение оппонента, зал жюри с голосованием, вердикт с процентами.">
+<meta name="theme-color" content="#f7f2e8">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23231b2e'/%3E%3Ctext x='16' y='23' font-family='Arial Black,Arial' font-size='20' font-weight='900' text-anchor='middle' fill='%23d94f36'%3E%D0%92%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;800;900&family=Martian+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/site.css">
+<style>
+/* ============ каркас приложения ============ */
+body{background:var(--desk)}
+.appbar{
+  position:sticky;top:0;z-index:var(--z-sticky);
+  background:var(--paper);border-bottom:1.5px solid var(--ink);
+}
+.appbar-in{display:flex;align-items:center;gap:var(--sp-4);min-height:60px}
+.appbar .back{font-size:.875rem;color:var(--ink-2);margin-left:auto;display:flex;align-items:center;gap:6px;transition:color .16s}
+.appbar .back:hover{color:var(--a)}
+.appbar .badge-demo{font-family:var(--mono);font-size:.5rem;letter-spacing:.11em;text-transform:uppercase;border:1px solid var(--ink);padding:3px 6px;background:var(--warn-soft)}
+
+.shell{
+  max-width:1120px;margin-inline:auto;
+  padding:var(--sp-8) clamp(20px,5vw,48px) var(--sp-24);
+  display:grid;grid-template-columns:232px minmax(0,1fr);gap:clamp(24px,4vw,56px);align-items:start;
+}
+
+/* рельса шагов (ПК) */
+.rail{position:sticky;top:76px;display:grid;border-top:1.5px solid var(--ink)}
+.rail button{
+  display:grid;grid-template-columns:2rem 1fr;gap:var(--sp-2);align-items:baseline;text-align:left;
+  padding:var(--sp-3) 0;border-bottom:1px solid var(--rule);
+  transition:padding-left .28s var(--ease-out),color .18s;
+}
+.rail button:hover{padding-left:var(--sp-2);color:var(--a)}
+.rail button[aria-current="true"]{color:var(--a);font-weight:700}
+.rail .n{font-family:var(--mono);font-size:.5625rem;letter-spacing:.08em;color:var(--ink-3);border:1px solid currentColor;padding:2px 4px;justify-self:start}
+.rail button[aria-current="true"] .n{background:var(--a);border-color:var(--a);color:var(--paper)}
+.rail .t{font-size:.9375rem;letter-spacing:-.01em}
+.rail .s{display:block;font-size:.75rem;font-weight:400;color:var(--ink-3);line-height:1.35}
+.rail-note{margin-top:var(--sp-6);font-size:.75rem;color:var(--ink-3);line-height:1.5}
+
+/* холст экрана */
+.pane{display:none;background:var(--paper);border:1.5px solid var(--ink);box-shadow:8px 8px 0 var(--ink);padding:clamp(20px,3.4vw,44px);max-width:720px}
+.pane.on{display:block;animation:paneIn .38s var(--ease-out)}
+@keyframes paneIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.pane-head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-6)}
+.pane h2{font-size:clamp(1.5rem,2.8vw,2.125rem);font-weight:900;letter-spacing:-.035em}
+.divider{height:1px;background:var(--rule);border:0;margin:var(--sp-6) 0}
+
+/* демо-переключатели */
+.demo{margin-top:var(--sp-8);border:1px dashed var(--ink-3);padding:var(--sp-3);display:grid;gap:var(--sp-2)}
+.demo button{text-align:left;font-size:.875rem;color:var(--ink-2);display:flex;gap:8px;align-items:center;transition:color .16s,transform .2s var(--ease-out)}
+.demo button::before{content:"▸";color:var(--ink-3);font-size:.75rem}
+.demo button:hover{color:var(--a);transform:translateX(3px)}
+
+/* ============ создание спора ============ */
+.topic{
+  width:100%;min-height:104px;resize:vertical;background:transparent;border:0;border-bottom:1.5px solid var(--ink);
+  font-family:var(--sans);font-size:clamp(1.25rem,2.4vw,1.75rem);font-weight:800;letter-spacing:-.03em;line-height:1.2;
+  padding:0 0 var(--sp-3);color:var(--ink);
+}
+.topic::placeholder{color:oklch(74% 0.014 305)}
+.topic:focus{outline:none;border-bottom-color:var(--a)}
+.topic-meta{display:flex;justify-content:space-between;gap:var(--sp-4);margin-top:var(--sp-2)}
+.inline-err{color:var(--a);font-size:.875rem;margin-top:var(--sp-2);display:none}
+.inline-err.on{display:block}
+
+.recorder{margin-top:var(--sp-8);border:1.5px solid var(--ink);background:var(--paper-2);padding:var(--sp-4)}
+.rec-top{display:flex;justify-content:space-between;align-items:center;gap:var(--sp-3)}
+.rec-timer{font-family:var(--mono);font-size:clamp(1.5rem,3vw,2rem);font-weight:600;letter-spacing:-.05em;line-height:1}
+.wave{display:flex;align-items:center;gap:2px;height:72px;margin:var(--sp-4) 0}
+.wave i{flex:1;background:var(--ink-3);height:10%;transform-origin:center;transition:height .2s var(--ease-out),background .3s}
+.wave.live i{background:var(--a);animation:pulse .72s var(--ease-out) infinite alternate;animation-delay:calc(var(--i) * -38ms)}
+.wave.done i{background:var(--ink)}
+@keyframes pulse{from{transform:scaleY(.3)}to{transform:scaleY(1)}}
+.rec-actions{display:flex;flex-wrap:wrap;gap:var(--sp-2);margin-top:var(--sp-2)}
+
+.check{display:flex;gap:var(--sp-3);align-items:flex-start;margin-top:var(--sp-6);font-size:.9375rem;color:var(--ink-2);cursor:pointer;max-width:60ch}
+.check input{appearance:none;width:22px;height:22px;flex:none;border:1.5px solid var(--ink);margin:2px 0 0;position:relative;cursor:pointer;background:var(--paper)}
+.check input:checked{background:var(--go)}
+.check input:checked::after{content:"";position:absolute;inset:4px 5px;border:solid var(--ink);border-width:0 0 2.5px 2.5px;transform:rotate(-45deg) translateY(-2px)}
+
+/* ============ приглашение ============ */
+.linkbox{display:flex;flex-wrap:wrap;align-items:center;gap:var(--sp-2);border:1.5px solid var(--ink);background:var(--paper-2);padding:var(--sp-3);margin-top:var(--sp-6)}
+.linkbox code{font-family:var(--mono);font-size:.75rem;flex:1;min-width:12ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.chips{display:flex;flex-wrap:wrap;gap:var(--sp-2);margin-top:var(--sp-3)}
+.chip{flex:1 1 120px;min-height:46px;border:1px solid var(--rule);font-weight:600;font-size:.9375rem;transition:border-color .18s,background .18s}
+.chip:hover{border-color:var(--ink);background:var(--paper-2)}
+.party{display:flex;justify-content:space-between;align-items:center;gap:var(--sp-4);padding-block:var(--sp-4);border-top:1px solid var(--rule)}
+.party:first-of-type{border-top:1.5px solid var(--ink)}
+.pending{display:flex;align-items:center;gap:8px;font-size:.9375rem;color:var(--ink-2);margin-top:6px}
+.spinner{width:14px;height:14px;border:2px solid var(--ink-3);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.notice{border:1.5px solid var(--warn);background:var(--warn-soft);padding:var(--sp-4);margin-top:var(--sp-6)}
+.notice strong{display:block;margin-bottom:4px}
+
+/* ============ жюри ============ */
+.case-topic{font-size:clamp(1.375rem,2.6vw,1.875rem);font-weight:900;letter-spacing:-.035em;line-height:1.12;margin:var(--sp-3) 0 var(--sp-6)}
+.side{border-top:1.5px solid var(--ink);padding:var(--sp-4) 0}
+.side-head{display:flex;align-items:flex-start;gap:var(--sp-4)}
+.play{
+  width:52px;height:52px;flex:none;border-radius:50%;border:1.5px solid var(--ink);background:var(--paper);
+  display:grid;place-items:center;transition:background .16s,color .16s,transform .16s var(--ease-out);
+}
+.play:hover{background:var(--ink);color:var(--paper)}
+.play:active{transform:scale(.94)}
+.play.playing{background:var(--a);border-color:var(--a);color:var(--paper)}
+.side.b .play.playing{background:var(--b);border-color:var(--b)}
+.play svg{width:16px;height:16px}
+.side-quote{font-size:.9375rem;color:var(--ink-2);margin-top:4px;max-width:52ch}
+.track{height:4px;background:var(--paper-3);margin-top:var(--sp-3);position:relative;overflow:hidden}
+.track b{position:absolute;inset:0;transform-origin:left;transform:scaleX(0);transition:transform .1s linear}
+.side.a .track b{background:var(--a)}
+.side.b .track b{background:var(--b)}
+.track-meta{display:flex;justify-content:space-between;font-family:var(--mono);font-size:.5625rem;letter-spacing:.06em;color:var(--ink-3);margin-top:6px}
+.vote-row{display:flex;flex-wrap:wrap;gap:var(--sp-3)}
+.vote{
+  flex:1 1 180px;min-height:76px;border:1.5px solid var(--ink);background:var(--paper);font-weight:700;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  transition:background .16s,color .16s,border-color .16s;
+}
+.vote small{font-family:var(--mono);font-size:.5625rem;letter-spacing:.09em;text-transform:uppercase;font-weight:400;opacity:.75}
+.vote.a:hover:not(:disabled){background:var(--a);border-color:var(--a);color:var(--paper)}
+.vote.b:hover:not(:disabled){background:var(--b);border-color:var(--b);color:var(--paper)}
+.vote:disabled{border-color:var(--rule);color:var(--ink-3);cursor:not-allowed}
+.gate-hint{display:flex;align-items:center;gap:8px;font-size:.875rem;color:var(--ink-3);margin-top:var(--sp-3)}
+.voted{border:1.5px solid var(--ink);background:var(--paper-2);padding:var(--sp-4);margin-top:var(--sp-4)}
+.comment{width:100%;border:1.5px solid var(--rule);background:var(--paper);padding:var(--sp-3);font-family:var(--sans);font-size:.9375rem;resize:vertical;margin-top:var(--sp-3);color:var(--ink)}
+.comment:focus{outline:none;border-color:var(--ink)}
+.report{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:.5625rem;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);margin-top:var(--sp-6)}
+.report:hover{color:var(--a)}
+.skel{display:grid;gap:var(--sp-3)}
+.skel i{display:block;height:16px;background:linear-gradient(90deg,var(--paper-2),var(--paper-3),var(--paper-2));background-size:200% 100%;animation:sweep 1.1s linear infinite}
+@keyframes sweep{to{background-position:-200% 0}}
+
+/* ============ вердикт ============ */
+.quorum-num{font-family:var(--mono);font-size:clamp(2.5rem,6vw,3.75rem);font-weight:600;letter-spacing:-.05em;line-height:1}
+.quorum-num span{font-size:1rem;color:var(--ink-3);letter-spacing:0}
+.qtrack{height:10px;border:1.5px solid var(--ink);margin-top:var(--sp-4);position:relative;overflow:hidden}
+.qtrack b{position:absolute;inset:0;background:var(--ink);transform-origin:left}
+.vsplit{height:74px;border:1.5px solid var(--ink);position:relative;overflow:hidden;background:var(--paper-2);margin-top:var(--sp-2)}
+.vsplit i{position:absolute;top:0;bottom:0;width:100%;transform:scaleX(0)}
+.vsplit .sa{background:var(--a);transform-origin:left;transition:transform 1.15s var(--ease-out)}
+.vsplit .sb{background:var(--b);transform-origin:right;transition:transform 1.15s var(--ease-out) .07s}
+.vnums{display:flex;justify-content:space-between;margin-top:var(--sp-2);font-family:var(--mono);font-weight:600;font-size:1.0625rem}
+.vnums .na{color:var(--a)}.vnums .nb{color:var(--b)}
+.stamp{display:inline-block;margin-top:var(--sp-8);padding:var(--sp-2) var(--sp-4);border:3px solid var(--a);color:var(--a);font-weight:900;font-size:clamp(1rem,2vw,1.375rem);letter-spacing:.04em;text-transform:uppercase;transform:rotate(-3deg)}
+.tc{display:grid;grid-template-columns:auto 1fr;gap:var(--sp-4);border-top:1px solid var(--rule);padding-block:var(--sp-4)}
+.tc-up{display:grid;justify-items:center;font-family:var(--mono);font-size:.75rem;color:var(--ink-2)}
+.tc-who{font-family:var(--mono);font-size:.5625rem;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);margin-top:6px}
+
+/* ============ профиль ============ */
+.record{display:flex;flex-wrap:wrap;gap:var(--sp-8);margin-top:var(--sp-6)}
+.record b{display:block;font-family:var(--mono);font-size:clamp(1.75rem,4vw,2.5rem);font-weight:600;letter-spacing:-.05em;line-height:.95}
+.badges{display:flex;flex-wrap:wrap;gap:var(--sp-2);margin-top:var(--sp-4)}
+.bdg{border:1.5px solid var(--ink);padding:var(--sp-2) var(--sp-3);font-size:.875rem;font-weight:600}
+.bdg.loss{background:var(--a-soft);border-color:var(--a);color:var(--a-deep)}
+.bdg.locked{border-style:dashed;border-color:var(--ink-3);color:var(--ink-3);font-weight:400}
+.hist{display:flex;justify-content:space-between;align-items:baseline;gap:var(--sp-4);border-top:1px solid var(--rule);padding-block:var(--sp-3)}
+.hist p{font-weight:600;letter-spacing:-.01em}
+.hist .res{font-family:var(--mono);font-size:.8125rem;white-space:nowrap}
+.hist .res.w{color:var(--go-deep)}
+.hist .res.l{color:var(--a)}
+
+/* ============ пейволл ============ */
+.scrim{position:fixed;inset:0;background:oklch(20% 0.026 305 / .5);z-index:var(--z-sheet);opacity:0;visibility:hidden;transition:opacity .28s var(--ease-out),visibility .28s}
+.scrim.on{opacity:1;visibility:visible}
+.sheet{
+  position:fixed;z-index:calc(var(--z-sheet) + 1);left:50%;bottom:0;width:min(560px,100%);
+  transform:translate(-50%,102%);transition:transform .44s var(--ease-out);
+  background:var(--paper);border:1.5px solid var(--ink);border-bottom:0;
+  padding:var(--sp-6) clamp(20px,4vw,36px) var(--sp-8);max-height:92vh;overflow-y:auto;
+}
+.sheet.on{transform:translate(-50%,0)}
+.grab{width:46px;height:3px;background:var(--ink-3);margin:0 auto var(--sp-4)}
+.tier{
+  display:grid;grid-template-columns:1fr auto;gap:var(--sp-2) var(--sp-4);align-items:center;
+  width:100%;text-align:left;border:1.5px solid var(--rule);padding:var(--sp-3) var(--sp-4);margin-top:var(--sp-3);
+  transition:border-color .18s,background .18s,box-shadow .2s var(--ease-out);
+}
+.tier:hover{border-color:var(--ink-3)}
+.tier.sel{border-color:var(--ink);background:var(--paper-2);box-shadow:4px 4px 0 var(--ink)}
+.tier b{font-size:1.0625rem;letter-spacing:-.02em}
+.tier .price{font-family:var(--mono);font-weight:600;font-size:1.0625rem}
+.tier small{grid-column:1/-1;font-size:.875rem;color:var(--ink-3)}
+.tier .flag{grid-column:1/-1;justify-self:start;font-family:var(--mono);font-size:.5rem;letter-spacing:.11em;text-transform:uppercase;background:var(--go);border:1px solid var(--ink);padding:2px 6px}
+.fine{font-size:.75rem;color:var(--ink-3);margin-top:var(--sp-4);line-height:1.5}
+
+/* ============ тост ============ */
+.toast{
+  position:fixed;left:50%;bottom:var(--sp-6);z-index:var(--z-toast);width:min(440px,calc(100% - 32px));
+  transform:translate(-50%,16px);opacity:0;visibility:hidden;
+  background:var(--ink);color:var(--paper);padding:var(--sp-3) var(--sp-4);font-size:.9375rem;font-weight:500;
+  transition:opacity .2s var(--ease-out),transform .3s var(--ease-out),visibility .2s;
+}
+.toast.on{transform:translate(-50%,0);opacity:1;visibility:visible}
+
+/* ============ нижняя навигация (мобилка) ============ */
+.tabbar{display:none}
+
+/* ============ адаптив ============ */
+@media (max-width:900px){
+  .shell{grid-template-columns:1fr;padding-top:var(--sp-4);padding-bottom:100px;gap:var(--sp-6)}
+  .rail{display:none}
+  .pane{max-width:none;border-left:0;border-right:0;box-shadow:none;padding:var(--sp-6) clamp(16px,4vw,24px) var(--sp-8);margin-inline:calc(clamp(20px,5vw,48px) * -1)}
+  .tabbar{
+    display:grid;grid-template-columns:repeat(3,1fr);position:fixed;left:0;right:0;bottom:0;z-index:var(--z-drawer);
+    background:var(--paper);border-top:1.5px solid var(--ink);min-height:64px;align-items:center;
+  }
+  .tabbar button{display:grid;justify-items:center;gap:4px;padding-block:10px;font-family:var(--mono);font-size:.5625rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-3);min-height:44px}
+  .tabbar button.on{color:var(--ink)}
+  .tabbar svg{width:19px;height:19px}
+  .toast{bottom:80px}
+  .sheet{width:100%}
+}
+</style>
+</head>
+<body>
+
+<header class="appbar">
+  <div class="wrap appbar-in">
+    <a class="logo" href="index.html">Вер<em>дикт</em></a>
+    <span class="badge-demo">прототип</span>
+    <a class="back" href="index.html">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M8.5 2.5 4 7l4.5 4.5" stroke="currentColor" stroke-width="1.6"/></svg>
+      На сайт
+    </a>
+  </div>
+</header>
+
+<div class="shell">
+
+  <!-- ============ рельса шагов ============ -->
+  <nav class="rail" id="rail" aria-label="Экраны прототипа">
+    <button data-go="create"><span class="n">01</span><span class="t">Создать спор<span class="s">Тема, 60 секунд, согласие</span></span></button>
+    <button data-go="invite"><span class="n">02</span><span class="t">Вторая сторона<span class="s">Здесь умирает половина дел</span></span></button>
+    <button data-go="jury"><span class="n">03</span><span class="t">Зал жюри<span class="s">Голос после прослушивания</span></span></button>
+    <button data-go="verdict"><span class="n">04</span><span class="t">Вердикт<span class="s">Кворум, проценты, бейдж</span></span></button>
+    <button data-go="profile"><span class="n">05</span><span class="t">Профиль<span class="s">Счёт и позорные бейджи</span></span></button>
+    <p class="rail-note">Всё кликабельно: таймер записи, шкалы прослушивания, подсчёт голосов и оплата работают. Аудио имитируется, воспроизведение ускорено. Пунктирные блоки внутри экранов переключают состояния.</p>
+  </nav>
+
+  <main>
+
+    <!-- ============ 01 создание ============ -->
+    <section class="pane on" id="p-create">
+      <div class="pane-head">
+        <span class="eyebrow">Дело №&nbsp;4417 · черновик</span>
+        <span class="tag tag-a">сторона А · ты</span>
+      </div>
+      <h2>В чём спор?</h2>
+      <p class="small" style="margin-top:12px;max-width:52ch">Одно предложение по существу. Жюри должно понять суть, не зная вас.</p>
+
+      <div style="margin-top:28px">
+        <textarea class="topic" id="topic" maxlength="90" rows="2" placeholder="Например: поехал на рыбалку в годовщину"></textarea>
+        <div class="topic-meta">
+          <span class="eyebrow">Формулируй нейтрально</span>
+          <span class="eyebrow mono" id="topicCount">0/90</span>
+        </div>
+        <p class="inline-err" id="topicErr">Без темы жюри не поймёт, о чём спор.</p>
+      </div>
+
+      <div class="recorder">
+        <div class="rec-top">
+          <span class="eyebrow" id="recState">Готов к записи</span>
+          <span class="rec-timer mono" id="recTimer">0:60</span>
+        </div>
+        <div class="wave" id="wave" aria-hidden="true"></div>
+        <button class="btn btn-block" id="recBtn">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="5.5" y="1.5" width="5" height="8" rx="2.5" stroke="currentColor" stroke-width="1.5"/><path d="M3 8a5 5 0 0 0 10 0M8 13v2" stroke="currentColor" stroke-width="1.5"/></svg>
+          <span id="recLabel">Записать аргументы</span>
+        </button>
+        <div class="rec-actions" id="recActions" style="display:none">
+          <button class="btn btn-ghost btn-sm" id="rePlay">Прослушать</button>
+          <button class="btn btn-ghost btn-sm" id="reRec">Записать заново</button>
+        </div>
+        <p class="inline-err" id="recErr">Меньше 10 секунд: жюри не поймёт сути. Запиши ещё раз.</p>
+      </div>
+
+      <label class="check">
+        <input type="checkbox" id="consent">
+        <span>Разрешаю анонимно использовать этот спор в видео. Оригинальный голос не публикуется, история переозвучивается синтезом.</span>
+      </label>
+
+      <div style="margin-top:28px">
+        <button class="btn btn-block" id="toInvite">Отправить оппоненту</button>
+      </div>
+      <p class="muted" style="margin-top:12px">Имена, адреса и данные третьих лиц вырезаются автоматически перед публикацией.</p>
+    </section>
+
+    <!-- ============ 02 приглашение ============ -->
+    <section class="pane" id="p-invite">
+      <div class="pane-head">
+        <span class="eyebrow">Дело №&nbsp;4417 · ждёт вторую сторону</span>
+        <span class="eyebrow mono" id="inviteClock">23:41 до закрытия</span>
+      </div>
+      <h2 id="inviteTopic">Тема спора</h2>
+      <p class="small" style="margin-top:12px;max-width:52ch">Пока оппонент не запишет свои 60 секунд, дело закрыто для жюри. Односторонние обвинения мы не судим.</p>
+
+      <div class="linkbox">
+        <code>verdict.app/c/4417-xk29</code>
+        <button class="btn btn-ghost btn-sm" id="copyLink">Копировать</button>
+      </div>
+      <div class="chips">
+        <button class="chip">Telegram</button>
+        <button class="chip">WhatsApp</button>
+        <button class="chip">Ещё</button>
+      </div>
+
+      <div style="margin-top:32px">
+        <div class="party">
+          <div>
+            <span class="tag tag-a">сторона А</span>
+            <p style="font-weight:600;margin-top:6px">Записано, 0:52</p>
+          </div>
+          <span class="mono" style="color:var(--go-deep);font-size:.8125rem">готово</span>
+        </div>
+        <div class="party">
+          <div>
+            <span class="tag tag-b">сторона Б</span>
+            <div class="pending" id="sideBState"><span class="spinner"></span>Ждём ответ</div>
+          </div>
+          <span class="mono" style="color:var(--ink-3);font-size:.8125rem" id="sideBClock">0 из 2 напоминаний</span>
+        </div>
+      </div>
+
+      <div class="notice" id="ghostNotice" style="display:none">
+        <strong>Оппонент молчит сутки</strong>
+        <p class="small">Можно напомнить ещё раз, назначить другую вторую сторону или опубликовать дело с честной пометкой «одна сторона». Присяжные увидят пометку, и вердикт будет слабее.</p>
+        <div class="chips">
+          <button class="chip">Напомнить</button>
+          <button class="chip" id="publishOneSided">Опубликовать так</button>
+        </div>
+      </div>
+
+      <div class="demo">
+        <span class="eyebrow">Демо-состояния</span>
+        <button id="simAnswer">Оппонент записал ответ</button>
+        <button id="simGhost">Оппонент молчит 24 часа</button>
+      </div>
+    </section>
+
+    <!-- ============ 03 жюри ============ -->
+    <section class="pane" id="p-jury">
+      <div class="pane-head">
+        <span class="eyebrow">Зал жюри</span>
+        <span class="tag" id="juryCounter">дело 1 из 4</span>
+      </div>
+
+      <div class="skel" id="jurySkel">
+        <i style="width:62%"></i><i style="width:88%"></i>
+        <i style="height:52px"></i><i style="height:52px"></i>
+      </div>
+
+      <div id="juryBody" style="display:none">
+        <span class="tag" id="caseAge">18 минут назад</span>
+        <h2 class="case-topic" id="caseTopic"></h2>
+
+        <div class="side a">
+          <div class="side-head">
+            <button class="play" data-play="a" aria-label="Слушать сторону А">
+              <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>
+            </button>
+            <div style="min-width:0">
+              <span class="tag tag-a">сторона А</span>
+              <p class="side-quote" id="quoteA"></p>
+            </div>
+          </div>
+          <div class="track"><b data-bar="a"></b></div>
+          <div class="track-meta"><span data-time="a">0:00</span><span>0:60</span></div>
+        </div>
+
+        <div class="side b">
+          <div class="side-head">
+            <button class="play" data-play="b" aria-label="Слушать сторону Б">
+              <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>
+            </button>
+            <div style="min-width:0">
+              <span class="tag tag-b">сторона Б</span>
+              <p class="side-quote" id="quoteB"></p>
+            </div>
+          </div>
+          <div class="track"><b data-bar="b"></b></div>
+          <div class="track-meta"><span data-time="b">0:00</span><span>0:60</span></div>
+        </div>
+
+        <div id="voteGate" style="border-top:1.5px solid var(--ink);padding-top:24px;margin-top:8px">
+          <div class="vote-row">
+            <button class="vote a" data-vote="a" disabled>Сторона А права<small>слушал 0%</small></button>
+            <button class="vote b" data-vote="b" disabled>Сторона Б права<small>слушал 0%</small></button>
+          </div>
+          <p class="gate-hint" id="gateHint">Голос откроется, когда прослушаешь обе стороны на 80%</p>
+        </div>
+
+        <div class="voted" id="votedBox" style="display:none">
+          <p style="font-weight:700">Голос учтён. Счёт скрыт до вердикта.</p>
+          <p class="muted" style="margin-top:4px">Увидев проценты, люди начинают голосовать за большинство. Поэтому цифры видит только суд.</p>
+          <textarea class="comment" id="juryComment" rows="2" placeholder="Комментарий для сторон (необязательно)"></textarea>
+          <div style="margin-top:16px"><button class="btn btn-sm" id="nextCase">Следующее дело</button></div>
+        </div>
+
+        <button class="report">Пожаловаться на дело</button>
+      </div>
+
+      <div id="juryEmpty" style="display:none;border-top:1.5px solid var(--ink);padding-top:20px">
+        <span class="eyebrow">Дела закончились</span>
+        <h2 style="margin-top:10px">Ты отсудил четыре дела</h2>
+        <p class="small" style="margin-top:12px;max-width:52ch">Новые споры появляются круглые сутки. Чем больше судишь, тем быстрее собирается жюри на твои собственные дела: у активных присяжных приоритет в очереди.</p>
+        <div style="margin-top:24px"><button class="btn btn-ghost" data-go="create">Пока создам свой спор</button></div>
+      </div>
+    </section>
+
+    <!-- ============ 04 вердикт ============ -->
+    <section class="pane" id="p-verdict">
+      <div class="pane-head">
+        <span class="eyebrow">Дело №&nbsp;4417</span>
+        <span class="tag tag-live" id="verdictStatus">идёт сбор жюри</span>
+      </div>
+      <h2 id="verdictTopic">Поехал на рыбалку в годовщину, потому что путёвку купили за месяц</h2>
+
+      <div id="quorumBlock" style="margin-top:32px">
+        <span class="eyebrow">Собрано присяжных</span>
+        <p class="quorum-num mono" style="margin-top:8px"><span id="qNow">63</span> <span>из 100</span></p>
+        <div class="qtrack"><b id="qBar" style="transform:scaleX(.63)"></b></div>
+        <p class="small" style="margin-top:16px;max-width:56ch">Мы не обещаем время, пока жюри не набрано, и не поднимаем счёт ботами. Одна фальшивая цифра убивает доверие ко всем вердиктам сразу.</p>
+        <div style="margin-top:28px"><button class="btn btn-block" id="openPaywall">Ускорить: срочный суд</button></div>
+        <div class="demo">
+          <span class="eyebrow">Демо-состояния</span>
+          <button id="simQuorum">Кворум собран, показать вердикт</button>
+        </div>
+      </div>
+
+      <div id="verdictBlock" style="display:none;margin-top:32px">
+        <span class="eyebrow">Вердикт · 100 присяжных</span>
+        <div class="vsplit"><i class="sa" id="barA"></i><i class="sb" id="barB"></i></div>
+        <div class="vnums">
+          <span class="na" id="pctA">0%</span>
+          <span class="nb" id="pctB">0%</span>
+        </div>
+
+        <div class="stamp">Виновен: сторона А</div>
+        <p class="small" style="margin-top:14px">Тебе начислен бейдж «Рыбалка важнее». Висит в профиле 30 дней.</p>
+
+        <hr class="divider">
+        <span class="eyebrow">Топ комментариев</span>
+        <div class="tc">
+          <div class="tc-up"><span>▲</span><span class="mono">412</span></div>
+          <div>
+            <p>Путёвку купили за месяц, годовщина известна с прошлого года. Планировать надо было в обратном порядке.</p>
+            <p class="tc-who">присяжный №&nbsp;18</p>
+          </div>
+        </div>
+        <div class="tc">
+          <div class="tc-up"><span>▲</span><span class="mono">287</span></div>
+          <div>
+            <p>Обидно не за рыбалку, а за то, что решение приняли без неё. Это слышно по голосу.</p>
+            <p class="tc-who">присяжный №&nbsp;61</p>
+          </div>
+        </div>
+        <div class="tc">
+          <div class="tc-up"><span>▲</span><span class="mono">143</span></div>
+          <div>
+            <p>Сторона Б держалась хорошо, но фраза «ты всегда так делаешь» стоила ей процентов десять.</p>
+            <p class="tc-who">присяжный №&nbsp;7</p>
+          </div>
+        </div>
+
+        <div style="margin-top:28px"><button class="btn" id="shareVerdict">Поделиться вердиктом</button></div>
+        <p class="muted" style="margin-top:12px">Картинка уходит без голосов, имён и записей.</p>
+      </div>
+    </section>
+
+    <!-- ============ 05 профиль ============ -->
+    <section class="pane" id="p-profile">
+      <div class="pane-head">
+        <span class="eyebrow">Профиль · анонимный</span>
+        <span class="tag">судья 3 уровня</span>
+      </div>
+      <h2>🦊 Лис 417</h2>
+
+      <div class="record">
+        <div><b class="mono">7</b><span class="eyebrow">побед</span></div>
+        <div><b class="mono" style="color:var(--a)">5</b><span class="eyebrow">поражений</span></div>
+        <div><b class="mono">218</b><span class="eyebrow">дел отсужено</span></div>
+      </div>
+
+      <hr class="divider">
+      <span class="eyebrow">Бейджи</span>
+      <div class="badges">
+        <span class="bdg loss">🎣 Рыбалка важнее</span>
+        <span class="bdg loss">🗑 Мусор так и стоит</span>
+        <span class="bdg">⚖️ Судья 3 уровня</span>
+        <span class="bdg">🔥 Стрик 12 дней</span>
+        <span class="bdg locked">🏛 100 дел без жалоб</span>
+        <span class="bdg locked">👑 Вердикт 95 к 5</span>
+      </div>
+
+      <hr class="divider">
+      <span class="eyebrow">История споров</span>
+      <div class="hist"><p>Рыбалка в годовщину</p><span class="res l">29% · проигрыш</span></div>
+      <div class="hist"><p>Кто выносит мусор, если пакет с его стороны</p><span class="res l">44% · проигрыш</span></div>
+      <div class="hist"><p>Рабочие письма в оплаченном отпуске</p><span class="res w">81% · победа</span></div>
+      <div class="hist"><p>Чужая зарядка на пять минут</p><span class="res w">67% · победа</span></div>
+      <div class="hist"><p>Кот спит на кровати или нет</p><span class="res" style="color:var(--ink-3)">ждёт кворума</span></div>
+
+      <div style="margin-top:32px"><button class="btn btn-ghost btn-block" id="openPaywall2">Подписка «Неограниченные споры»</button></div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ============ пейволл ============ -->
+<div class="scrim" id="scrim"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="Тарифы">
+  <div class="grab"></div>
+  <span class="eyebrow">Оппонент ответил · дело готово к суду</span>
+  <h3 class="h3" style="margin-top:8px">Ждать сутки или узнать сейчас</h3>
+  <button class="tier sel" data-tier="urgent">
+    <span class="flag">импульс</span>
+    <b>Срочный суд</b><span class="price">3 $</span>
+    <small>Вердикт за 30 минут, дело поднимается в начало очереди жюри</small>
+  </button>
+  <button class="tier" data-tier="wide">
+    <b>Расширенное жюри</b><span class="price">5 $</span>
+    <small>До 1000 голосов. Для дел, где «сто человек это мало»</small>
+  </button>
+  <button class="tier" data-tier="sub">
+    <b>Подписка</b><span class="price">7 $/мес</span>
+    <small>Неограниченные споры, срочность включена, бейджи можно скрывать</small>
+  </button>
+  <div style="margin-top:24px"><button class="btn btn-block" id="buy">Оплатить</button></div>
+  <button class="btn btn-ghost btn-sm btn-block" style="margin-top:8px" id="skipPay">Подожду сутки бесплатно</button>
+  <p class="fine">Подписка продлевается автоматически, отменяется в магазине приложений в любой момент. Оплата влияет на скорость сбора жюри и его размер, но не на результат: голоса всегда живые.</p>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<!-- ============ нижняя навигация ============ -->
+<nav class="tabbar" id="tabbar" aria-label="Навигация">
+  <button data-go="create" class="on">
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 17h6M11.5 2.5l6 6-8 8-6-6z" stroke="currentColor" stroke-width="1.5"/></svg>Спор
+  </button>
+  <button data-go="jury">
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M10 2 2.5 6 10 10l7.5-4z M2.5 11 10 15l7.5-4" stroke="currentColor" stroke-width="1.5"/></svg>Жюри
+  </button>
+  <button data-go="profile">
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="7" r="3.2" stroke="currentColor" stroke-width="1.5"/><path d="M3.5 17c1.4-3.2 3.7-4.6 6.5-4.6s5.1 1.4 6.5 4.6" stroke="currentColor" stroke-width="1.5"/></svg>Профиль
+  </button>
+</nav>
+
+<script>
+(function(){
+  'use strict';
+  var $=function(s,r){return (r||document).querySelector(s)};
+  var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+
+  var S={screen:'create',topic:'',recorded:0,recording:false,consent:false,tier:'urgent',
+         caseIndex:0,listened:{a:0,b:0},playing:null,jurySeeded:false};
+
+  var CASES=[
+    {age:'18 минут назад',
+     topic:'Нормально ли читать переписку партнёра, если телефон остался открытым',
+     a:'«Если бы там нечего было скрывать, ты бы не паниковал»',
+     b:'«Открытый телефон это не приглашение, это доверие»'},
+    {age:'42 минуты назад',
+     topic:'Кто должен выносить мусор, если пакет стоит с его стороны кухни',
+     a:'«Я готовил три дня подряд, мусор не моя зона»',
+     b:'«Он буквально у твоих ног, это тридцать секунд»'},
+    {age:'час назад',
+     topic:'Можно ли отвечать на рабочие письма в отпуске, если отпуск оплачен',
+     a:'«Два письма за неделю никого не убили»',
+     b:'«Ты обещал не открывать ноутбук, я планировала этот отпуск полгода»'},
+    {age:'2 часа назад',
+     topic:'Можно ли брать чужую зарядку без спроса, если хозяин в другой комнате',
+     a:'«Пять минут и я вернул её на место»',
+     b:'«Спросить занимает меньше времени, чем зарядить телефон»'}
+  ];
+
+  var toastTimer;
+  function toast(m){var t=$('#toast');t.textContent=m;t.classList.add('on');
+    clearTimeout(toastTimer);toastTimer=setTimeout(function(){t.classList.remove('on')},2800)}
+  function fmt(s){return '0:'+String(Math.max(0,Math.round(s))).padStart(2,'0')}
+
+  /* ---------- навигация ---------- */
+  var TAB={create:'create',invite:'create',verdict:'create',jury:'jury',profile:'profile'};
+  function go(name){
+    S.screen=name;
+    $$('.pane').forEach(function(p){p.classList.toggle('on',p.id==='p-'+name)});
+    $$('#rail button').forEach(function(b){b.setAttribute('aria-current',String(b.dataset.go===name))});
+    $$('#tabbar button').forEach(function(b){b.classList.toggle('on',b.dataset.go===TAB[name])});
+    if(name==='jury') seedJury();
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
+  $$('[data-go]').forEach(function(b){b.addEventListener('click',function(){go(b.dataset.go)})});
+
+  /* ---------- волна ---------- */
+  var BARS=52, wave=$('#wave');
+  var hs=[];
+  for(var i=0;i<BARS;i++){hs.push(14+Math.abs(Math.sin(i*1.7))*70+(i%5)*4);
+    var b=document.createElement('i');b.style.setProperty('--i',String(i));wave.appendChild(b)}
+  function paint(r){Array.prototype.forEach.call(wave.children,function(el,i){el.style.height=(i/BARS<=r?hs[i]:7)+'%'})}
+  paint(0);
+
+  /* ---------- создание ---------- */
+  var topic=$('#topic');
+  topic.addEventListener('input',function(){
+    S.topic=topic.value.trim();
+    $('#topicCount').textContent=topic.value.length+'/90';
+    if(S.topic) $('#topicErr').classList.remove('on');
+  });
+
+  var recInt=null;
+  function startRec(){
+    S.recording=true;S.recorded=0;
+    $('#recLabel').textContent='Стоп';
+    $('#recState').textContent='Идёт запись';
+    $('#recErr').classList.remove('on');
+    wave.classList.add('live');wave.classList.remove('done');paint(1);
+    $('#recActions').style.display='none';
+    recInt=setInterval(function(){
+      S.recorded+=0.35;                       /* ускорено для прототипа */
+      $('#recTimer').textContent=fmt(60-S.recorded);
+      if(S.recorded>=60) stopRec();
+    },100);
+  }
+  function stopRec(){
+    clearInterval(recInt);S.recording=false;
+    wave.classList.remove('live');
+    if(S.recorded<10){
+      S.recorded=0;paint(0);
+      $('#recState').textContent='Слишком коротко';
+      $('#recErr').classList.add('on');
+      $('#recTimer').textContent='0:60';
+      $('#recLabel').textContent='Записать аргументы';
+      return;
+    }
+    wave.classList.add('done');paint(1);
+    $('#recState').textContent='Записано '+fmt(S.recorded);
+    $('#recTimer').textContent=fmt(S.recorded);
+    $('#recLabel').textContent='Перезаписать';
+    $('#recActions').style.display='flex';
+  }
+  $('#recBtn').addEventListener('click',function(){S.recording?stopRec():startRec()});
+  $('#reRec').addEventListener('click',startRec);
+  $('#rePlay').addEventListener('click',function(){toast('Воспроизведение: '+fmt(S.recorded))});
+  $('#consent').addEventListener('change',function(e){S.consent=e.target.checked});
+
+  $('#toInvite').addEventListener('click',function(){
+    if(!S.topic){$('#topicErr').classList.add('on');topic.focus();return}
+    if(!S.recorded){$('#recState').textContent='Сначала запиши аргументы';$('#recErr').classList.add('on');return}
+    $('#inviteTopic').textContent=S.topic;
+    $('#verdictTopic').textContent=S.topic;
+    go('invite');
+    toast(S.consent?'Дело создано, согласие на контент получено':'Дело создано, в контент не пойдёт');
+  });
+
+  /* ---------- приглашение ---------- */
+  $('#copyLink').addEventListener('click',function(){
+    var url='https://verdict.app/c/4417-xk29';
+    if(navigator.clipboard) navigator.clipboard.writeText(url).catch(function(){});
+    toast('Ссылка скопирована, отправь оппоненту');
+  });
+  $('#simAnswer').addEventListener('click',function(){
+    $('#sideBState').innerHTML='Записано, 0:47';
+    $('#sideBClock').textContent='готово';
+    $('#inviteClock').textContent='дело готово к суду';
+    $('#ghostNotice').style.display='none';
+    setTimeout(openSheet,600);   /* пейволл в момент максимального нетерпения */
+  });
+  $('#simGhost').addEventListener('click',function(){
+    $('#ghostNotice').style.display='block';
+    $('#inviteClock').textContent='00:00 до закрытия';
+    $('#sideBClock').textContent='2 из 2 напоминаний';
+  });
+  $('#publishOneSided').addEventListener('click',function(){
+    closeSheet();go('verdict');toast('Дело опубликовано с пометкой «одна сторона»');
+  });
+
+  /* ---------- пейволл ---------- */
+  function openSheet(){$('#scrim').classList.add('on');$('#sheet').classList.add('on')}
+  function closeSheet(){$('#scrim').classList.remove('on');$('#sheet').classList.remove('on')}
+  $('#scrim').addEventListener('click',closeSheet);
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')closeSheet()});
+  $('#openPaywall').addEventListener('click',openSheet);
+  $('#openPaywall2').addEventListener('click',openSheet);
+  $$('.tier').forEach(function(t){t.addEventListener('click',function(){
+    $$('.tier').forEach(function(x){x.classList.remove('sel')});
+    t.classList.add('sel');S.tier=t.dataset.tier;
+  })});
+  $('#buy').addEventListener('click',function(){
+    var btn=$('#buy'),label=btn.textContent;
+    btn.disabled=true;btn.textContent='Оплата…';
+    setTimeout(function(){
+      btn.disabled=false;btn.textContent=label;closeSheet();
+      var msg={urgent:'Срочный суд включён: вердикт за 30 минут',
+               wide:'Жюри расширено до 1000 присяжных',
+               sub:'Подписка активна'}[S.tier];
+      toast(msg);go('verdict');
+      if(S.tier!=='wide') ramp(Number($('#qNow').textContent),100,2200);
+    },950);
+  });
+  $('#skipPay').addEventListener('click',function(){closeSheet();go('verdict');toast('Бесплатный суд: вердикт до 24 часов')});
+
+  /* ---------- жюри ---------- */
+  function seedJury(){
+    if(S.jurySeeded) return;
+    S.jurySeeded=true;
+    setTimeout(function(){
+      $('#jurySkel').style.display='none';
+      $('#juryBody').style.display='block';
+      renderCase();
+    },700);
+  }
+  function renderCase(){
+    var c=CASES[S.caseIndex];
+    if(!c){
+      $('#juryBody').style.display='none';
+      $('#juryEmpty').style.display='block';
+      $('#juryCounter').textContent='смена закрыта';
+      return;
+    }
+    $('#caseTopic').textContent=c.topic;
+    $('#caseAge').textContent=c.age;
+    $('#quoteA').textContent=c.a;
+    $('#quoteB').textContent=c.b;
+    $('#juryCounter').textContent='дело '+(S.caseIndex+1)+' из '+CASES.length;
+    S.listened={a:0,b:0};stopPlay();
+    ['a','b'].forEach(function(k){
+      $('[data-bar="'+k+'"]').style.transform='scaleX(0)';
+      $('[data-time="'+k+'"]').textContent='0:00';
+    });
+    $('#votedBox').style.display='none';
+    $('#voteGate').style.display='block';
+    $('#juryComment').value='';
+    gate();
+  }
+  var playInt=null;
+  function icon(kind){
+    return kind==='pause'
+      ? '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><rect x="4" y="3" width="3" height="10"/><rect x="9" y="3" width="3" height="10"/></svg>'
+      : '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M4 2.5v11l9-5.5z"/></svg>';
+  }
+  function stopPlay(){
+    clearInterval(playInt);playInt=null;
+    if(S.playing){
+      var btn=$('[data-play="'+S.playing+'"]');
+      btn.classList.remove('playing');btn.innerHTML=icon('play');
+    }
+    S.playing=null;
+  }
+  function play(side){
+    if(S.playing===side){stopPlay();return}
+    stopPlay();S.playing=side;
+    var btn=$('[data-play="'+side+'"]');
+    btn.classList.add('playing');btn.innerHTML=icon('pause');
+    playInt=setInterval(function(){
+      S.listened[side]=Math.min(1,S.listened[side]+0.0125);  /* минута за 8 секунд демо */
+      $('[data-bar="'+side+'"]').style.transform='scaleX('+S.listened[side]+')';
+      $('[data-time="'+side+'"]').textContent=fmt(S.listened[side]*60);
+      gate();
+      if(S.listened[side]>=1) stopPlay();
+    },100);
+  }
+  $$('[data-play]').forEach(function(b){b.addEventListener('click',function(){play(b.dataset.play)})});
+
+  function gate(){
+    var ok=S.listened.a>=0.8&&S.listened.b>=0.8;
+    ['a','b'].forEach(function(k){
+      var btn=$('[data-vote="'+k+'"]');
+      btn.disabled=!ok;
+      $('small',btn).textContent='слушал '+Math.round(S.listened[k]*100)+'%';
+    });
+    $('#gateHint').textContent=ok
+      ? 'Обе стороны выслушаны. Решай.'
+      : 'Голос откроется, когда прослушаешь обе стороны на 80%';
+  }
+  $$('[data-vote]').forEach(function(b){b.addEventListener('click',function(){
+    stopPlay();
+    $('#voteGate').style.display='none';
+    $('#votedBox').style.display='block';
+  })});
+  $('#nextCase').addEventListener('click',function(){
+    S.caseIndex++;renderCase();
+    toast('Спасибо. Активные присяжные быстрее получают жюри на свои дела');
+  });
+
+  /* ---------- вердикт ---------- */
+  function ramp(from,to,dur){
+    var t0=performance.now();
+    function step(now){
+      var p=Math.min(1,(now-t0)/dur), e=1-Math.pow(1-p,4);
+      var v=Math.round(from+(to-from)*e);
+      $('#qNow').textContent=v;
+      $('#qBar').style.transform='scaleX('+(v/100)+')';
+      if(p<1) requestAnimationFrame(step); else reveal();
+    }
+    requestAnimationFrame(step);
+  }
+  function countTo(el,target,dur){
+    var t0=performance.now();
+    function step(now){
+      var p=Math.min(1,(now-t0)/dur);
+      el.textContent=Math.round(target*(1-Math.pow(1-p,4)))+'%';
+      if(p<1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
+  function reveal(){
+    $('#quorumBlock').style.display='none';
+    $('#verdictBlock').style.display='block';
+    var st=$('#verdictStatus');
+    st.textContent='вердикт вынесен';st.classList.remove('tag-live');
+    requestAnimationFrame(function(){
+      $('#barA').style.transform='scaleX(.71)';
+      $('#barB').style.transform='scaleX(.29)';
+      countTo($('#pctA'),71,1150);
+      countTo($('#pctB'),29,1150);
+    });
+  }
+  $('#simQuorum').addEventListener('click',function(){ramp(Number($('#qNow').textContent),100,1500)});
+  $('#shareVerdict').addEventListener('click',function(){toast('Картинка вердикта сохранена, голоса и имена вырезаны')});
+
+  go('create');
+})();
+</script>
+</body>
+</html>
