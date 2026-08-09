@@ -44,6 +44,7 @@ app.use('/api/jury', require('./routes/jury'));
 app.use('/api/payments', require('./routes/payments'));
 app.use('/api/moderation', require('./routes/moderation'));
 app.use('/api/content', require('./routes/content'));
+app.use('/api/waitlist', require('./routes/waitlist'));
 
 app.get('/api/health', function (_req, res) {
   res.json({
@@ -83,7 +84,6 @@ app.get('*', function (_req, res) {
 
 /* ---------------- обработка ошибок ---------------- */
 app.use(function (err, _req, res, _next) {
-  /* Слишком большой файл multer сообщает своим кодом */
   if (err && err.code === 'LIMIT_FILE_SIZE') {
     return res.status(413).json({
       error: 'file_too_large',
@@ -105,14 +105,14 @@ const server = app.listen(config.port, function () {
   console.log('');
   console.log('  Вердикт запущен');
   console.log('  Адрес:        ' + config.publicUrl);
-  console.log('  Порт:         ' + config.port);
   console.log('  База:         ' + config.dbPath);
   console.log('  Записи:       ' + config.uploadDir);
-  console.log('  Платежи:      ' + config.paymentsMode + (config.paymentsMode === 'sandbox'
-    ? ' (деньги не двигаются)' : ''));
+  console.log('  Платежи:      ' + config.paymentsMode +
+    (config.paymentsMode === 'sandbox' ? ' (деньги не двигаются)' : ''));
   console.log('  Транскрипт:   ' + (config.transcriptionEnabled ? 'включён' : 'выключен'));
   console.log('  Жюри:         ' + config.jury.targetFree + ' целевых, минимум ' +
     config.jury.minQuorum + ' для вердикта');
+  if (config.adminEmail) console.log('  Модератор:    ' + config.adminEmail);
   console.log('');
 });
 

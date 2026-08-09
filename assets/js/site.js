@@ -1,11 +1,10 @@
-/* Вердикт — поведение лендинга. Ноль зависимостей. */
+/* Вердикт — поведение лендинга. Работает с реальным API, без подделок. */
 (function () {
   'use strict';
 
   var $ = function (s, r) { return (r || document).querySelector(s); };
   var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
 
-  /* ---------- год в подвале ---------- */
   var yr = $('#year');
   if (yr) yr.textContent = new Date().getFullYear();
 
@@ -24,34 +23,8 @@
     $$('a', drawer).forEach(function (a) {
       a.addEventListener('click', function () { setDrawer(false); });
     });
-    document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape') setDrawer(false);
-    });
-    window.addEventListener('resize', function () {
-      if (window.innerWidth > 760) setDrawer(false);
-    });
-  }
-
-  /* ---------- тикер дел ---------- */
-  var DOCKET = [
-    'Дело 4417 · рыбалка в годовщину · 71 к 29 · виновен истец',
-    'Дело 4418 · чтение переписки при открытом телефоне · ждём кворум, 63 из 100',
-    'Дело 4419 · кто выносит мусор, если пакет с его стороны · 56 к 44',
-    'Дело 4420 · рабочие письма в оплаченном отпуске · 81 к 19 · виновен ответчик',
-    'Дело 4421 · кот спит на кровати или нет · собрано 12 присяжных'
-  ];
-  var tText = $('#tickerText');
-  if (tText) {
-    var ti = 0;
-    tText.textContent = DOCKET[0];
-    setInterval(function () {
-      tText.classList.add('swap');
-      setTimeout(function () {
-        ti = (ti + 1) % DOCKET.length;
-        tText.textContent = DOCKET[ti];
-        tText.classList.remove('swap');
-      }, 320);
-    }, 4200);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') setDrawer(false); });
+    window.addEventListener('resize', function () { if (window.innerWidth > 760) setDrawer(false); });
   }
 
   /* ---------- волны в карточке дела ---------- */
@@ -63,7 +36,7 @@
     }
   });
 
-  /* ---------- анимация полосы вердикта ---------- */
+  /* ---------- полоса вердикта в примере ---------- */
   function countUp(el, target, dur) {
     var t0 = performance.now();
     function step(now) {
@@ -88,13 +61,9 @@
     };
     if ('IntersectionObserver' in window) {
       new IntersectionObserver(function (entries, obs) {
-        entries.forEach(function (en) {
-          if (en.isIntersecting) { runSplit(); obs.disconnect(); }
-        });
+        entries.forEach(function (en) { if (en.isIntersecting) { runSplit(); obs.disconnect(); } });
       }, { threshold: 0.4 }).observe(splitbar);
-    } else {
-      runSplit();
-    }
+    } else { runSplit(); }
   }
 
   /* ---------- появление блоков ---------- */
@@ -102,10 +71,7 @@
   if (risers.length && 'IntersectionObserver' in window) {
     var io = new IntersectionObserver(function (entries) {
       entries.forEach(function (en) {
-        if (en.isIntersecting) {
-          en.target.classList.add('seen');
-          io.unobserve(en.target);
-        }
+        if (en.isIntersecting) { en.target.classList.add('seen'); io.unobserve(en.target); }
       });
     }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
     risers.forEach(function (el, i) {
@@ -125,18 +91,33 @@
     });
   });
 
-  /* ---------- форма записи в бету ---------- */
+  /* ---------- если уже вошёл, кнопки ведут в суд ---------- */
+  fetch('/api/auth/me', { credentials: 'same-origin' })
+    .then(function (r) { return r.ok ? r.json() : null; })
+    .then(function (d) {
+      if (!d || !d.user) return;
+      $$('[data-cta]').forEach(function (a) {
+        a.setAttribute('href', 'app.html');
+        a.textContent = 'Открыть суд';
+      });
+    })
+    .catch(function () { /* сервер не запущен: лендинг всё равно читается */ });
+
+  /* ---------- список беты: настоящие заявки ---------- */
+  var counter = $('#signupCount');
+  if (counter) {
+    fetch('/api/waitlist/count')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (d) counter.textContent = String(d.count); })
+      .catch(function () { counter.textContent = '—'; });
+  }
+
   var form = $('#waitlist');
   if (form) {
     var email = $('#email', form);
     var errBox = $('#emailErr', form);
     var okBox = $('#formOk');
     var submit = $('#submitBtn', form);
-    var counter = $('#signupCount');
-    var stored = Number(localStorage.getItem('verdict_waitlist') || 0);
-    var base = 1284;
-    if (counter) counter.textContent = String(base + stored);
-
     var valid = function (v) { return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v); };
 
     email.addEventListener('input', function () {
@@ -144,54 +125,51 @@
       errBox.classList.remove('on');
     });
 
-    form.addEventListener('submit', function (e) {
+    form.addEventListener('submit', async function (e) {
       e.preventDefault();
       var v = email.value.trim();
       if (!valid(v)) {
         email.setAttribute('aria-invalid', 'true');
-        errBox.textContent = v ? 'Проверь адрес, похоже на опечатку.' : 'Без почты мы не сможем позвать тебя в бету.';
+        errBox.textContent = v ? 'Проверь адрес, похоже на опечатку.' : 'Без почты мы не позовём тебя в бету.';
         errBox.classList.add('on');
         email.focus();
         return;
       }
 
-      var role = $('#role', form) ? $('#role', form).value : '';
-      var endpoint = (form.dataset.endpoint || '').trim();
-
-      submit.disabled = true;
       var label = submit.textContent;
+      submit.disabled = true;
       submit.textContent = 'Отправляем…';
 
-      var finish = function () {
-        stored += 1;
-        localStorage.setItem('verdict_waitlist', String(stored));
-        if (counter) counter.textContent = String(base + stored);
+      try {
+        var res = await fetch('/api/waitlist', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email: v,
+            role: $('#role', form) ? $('#role', form).value : 'other',
+            city: $('#city', form) ? $('#city', form).value.trim() : ''
+          })
+        });
+        var data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Не отправилось.');
+
+        if (counter && data.count) counter.textContent = String(data.count);
         form.style.display = 'none';
         if (okBox) {
           okBox.classList.add('on');
           $('#okEmail', okBox).textContent = v;
+          if (data.already) $('#okNote', okBox).textContent = 'Ты уже был в списке, второй раз не добавили.';
           okBox.setAttribute('tabindex', '-1');
           okBox.focus();
         }
-      };
-
-      if (endpoint) {
-        fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ email: v, role: role, source: 'landing' })
-        }).then(finish).catch(function () {
-          submit.disabled = false;
-          submit.textContent = label;
-          errBox.textContent = 'Не отправилось. Попробуй ещё раз через минуту.';
-          errBox.classList.add('on');
-        });
-      } else {
-        // бэкенда пока нет: открываем почтовый клиент и считаем заявку принятой
-        var subj = encodeURIComponent('Хочу в бету Вердикта');
-        var body = encodeURIComponent('Почта: ' + v + '\nРоль: ' + (role || 'не указана'));
-        window.location.href = 'mailto:hello@verdict.app?subject=' + subj + '&body=' + body;
-        setTimeout(finish, 400);
+      } catch (err) {
+        submit.disabled = false;
+        submit.textContent = label;
+        errBox.textContent = err.message === 'Failed to fetch'
+          ? 'Сервер не отвечает. Запусти бэкенд командой npm start.'
+          : err.message;
+        errBox.classList.add('on');
       }
     });
   }

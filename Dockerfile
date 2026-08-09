@@ -19,7 +19,7 @@ COPY package.json ./
 COPY server ./server
 COPY assets ./assets
 COPY docs ./docs
-COPY index.html app.html login.html join.html .nojekyll ./
+COPY index.html app.html login.html join.html admin.html .nojekyll ./
 
 RUN mkdir -p /app/data /app/uploads && chown -R node:node /app
 USER node
